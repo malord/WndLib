@@ -240,7 +240,9 @@ namespace WndLib
 				
 				AppendEditControl((const TCHAR *) _logEntry->bytes.Get());
 				
-				_logEntry = _logEntry->next;
+				LogEntry *next = _logEntry->next;
+				delete _logEntry;
+				_logEntry = next;
 			}
 			
 			_lastLogEntry = 0;
