@@ -28,7 +28,7 @@
 namespace
 {
 	//
-	// 64-bit compatibility (UNTESTED!)
+	// 64-bit compatibility
 	//
 
 	#if _MSC_VER >= 1300
