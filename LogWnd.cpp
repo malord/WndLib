@@ -3,6 +3,10 @@
 
 namespace WndLib
 {
+	//
+	// LogWnd
+	//
+
 	WND_WM_BEGIN(LogWnd, Wnd)
 		WND_WM(WM_CLOSE, OnClose)
 		WND_WM(WM_DESTROY, OnDestroy)
@@ -22,12 +26,12 @@ namespace WndLib
 	LogWnd::~LogWnd()
 	{
 		DestroyWindow();
-		
+
 		if (_font)
 			DeleteObject(_font);
-			
+
 		CriticalSection::ScopedLock lock(_cs);
-			
+
 		while (_logEntry)
 		{
 			LogEntry *next = _logEntry->next;
@@ -38,11 +42,11 @@ namespace WndLib
 
 	bool LogWnd::Create(LPCTSTR title, HWND parent)
 	{
-		return CreateEx(0, title, 
-			WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN, 
-			40, 30, 
+		return CreateEx(0, title,
+			WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
+			40, 30,
 			GetSystemMetrics(SM_CXSCREEN) * 40 / 100,
-			GetSystemMetrics(SM_CYSCREEN) * 40 / 100, 
+			GetSystemMetrics(SM_CYSCREEN) * 40 / 100,
 			parent, NULL, GetInstanceHandle(), NULL, false);
 	}
 
@@ -55,17 +59,17 @@ namespace WndLib
 	{
 		if (! _font)
 			_font = CreateShellFont();
-			
+
 		_icons.LoadExeIcons();
-		
+
 		SendMessage(WM_SETICON, ICON_BIG, (LPARAM) _icons.GetLargeIcon());
 		SendMessage(WM_SETICON, ICON_SMALL, (LPARAM) _icons.GetSmallIcon());
-			
+
 		const bool hscroll = false;
 		const bool vscroll = true;
 		const bool border = false;
 		const bool clientedge = false;
-		
+
 		if (! _edit.CreateEx(clientedge ? WS_EX_CLIENTEDGE : 0, TEXT(""),
 			WS_CHILD | WS_VISIBLE | ES_MULTILINE | ES_READONLY |
 			ES_AUTOVSCROLL |
@@ -76,14 +80,14 @@ namespace WndLib
 		{
 			return -1;
 		}
-		
+
 		_edit.SetFont(_font);
-		
+
 		RECT desktopRect;
 		SystemParametersInfo(SPI_GETWORKAREA, 0, (PVOID) &desktopRect, FALSE);
-		SetWindowPos(NULL, desktopRect.left + 16, desktopRect.top + 16, 0, 0, 
+		SetWindowPos(NULL, desktopRect.left + 16, desktopRect.top + 16, 0, 0,
 			SWP_NOZORDER | SWP_NOSIZE | SWP_NOACTIVATE);
-		
+
 		return BaseWndProc(msg, wparam, lparam);
 	}
 
@@ -92,7 +96,7 @@ namespace WndLib
 		RECT rect;
 		GetClientRect(&rect);
 
-		_edit.SetWindowPos(NULL, 0, 0, rect.right-rect.left, rect.bottom-rect.top, 
+		_edit.SetWindowPos(NULL, 0, 0, rect.right-rect.left, rect.bottom-rect.top,
 			SWP_NOZORDER);
 
 		return BaseWndProc(msg, wparam, lparam);
@@ -177,7 +181,7 @@ namespace WndLib
 
 		ScrollEditControl();
 	}
-	
+
 	void LogWnd::ScrollEditControl()
 	{
 		DWORD len = _edit.GetTextLength();
@@ -186,24 +190,24 @@ namespace WndLib
 		_edit.ScrollCaret();
 		//_edit.UpdateWindow();
 	}
-	
+
 	void LogWnd::Log(const TCHAR *log, COLORREF colour, ShowCommand showCommand)
 	{
 		CriticalSection::ScopedLock lock(_cs);
-		
+
 		std::auto_ptr<LogEntry> logEntry(new LogEntry);
-		logEntry->bytes.Set(log, (lstrlen(log) + 1) * sizeof(TCHAR));
+		logEntry->text.Set(log, lstrlen(log) + 1);
 		logEntry->colour = colour;
 		logEntry->showCommand = showCommand;
 		logEntry->next = 0;
-		
+
 		if (_lastLogEntry)
 			_lastLogEntry->next = logEntry.get();
 		else
 			_logEntry = logEntry.get();
-			
+
 		_lastLogEntry = logEntry.release();
-		
+
 		PostMessage(WM_USER);
 	}
 
@@ -212,7 +216,7 @@ namespace WndLib
 		va_list argPtr;
 		va_start(argPtr, fmt);
 		TCHAR buffer[1024];
-		VSNTPrintf(buffer, sizeof(buffer), fmt, argPtr);
+		VSNTPrintf(buffer, WNDLIB_COUNTOF(buffer), fmt, argPtr);
 		va_end(argPtr);
 
 		Log(buffer, colour, showCommand);
@@ -223,36 +227,36 @@ namespace WndLib
 		ProcessQueue();
 		return 0;
 	}
-	
+
 	void LogWnd::ProcessQueue()
 	{
 		ShowCommand highestShowCommand = SHOWCOMMAND_NO_CHANGE;
-		
+
 		{
 			CriticalSection::ScopedLock lock(_cs);
-			
+
 			while (_logEntry)
 			{
 				SetColour(_logEntry->colour);
-				
+
 				if (_logEntry->showCommand > highestShowCommand)
 					highestShowCommand = _logEntry->showCommand;
-				
-				AppendEditControl((const TCHAR *) _logEntry->bytes.Get());
-				
+
+				AppendEditControl(_logEntry->text.Get());
+
 				LogEntry *next = _logEntry->next;
 				delete _logEntry;
 				_logEntry = next;
 			}
-			
+
 			_lastLogEntry = 0;
 		}
-		
+
 		if (! IsWindowVisible())
 		{
-			// If the user has explicitly closed us, don't reappear except 
+			// If the user has explicitly closed us, don't reappear except
 			// for an alert message.
-			if (highestShowCommand == SHOWCOMMAND_ALERT || 
+			if (highestShowCommand == SHOWCOMMAND_ALERT ||
 				(highestShowCommand >= SHOWCOMMAND_SHOW_IN_BACKGROUND && ! _userDidClose))
 			{
 				ShowWindow(highestShowCommand == SHOWCOMMAND_SHOW_IN_BACKGROUND ? SW_SHOWNOACTIVATE : SW_SHOWNORMAL);
@@ -261,11 +265,11 @@ namespace WndLib
 				ScrollEditControl();
 			}
 		}
-		
+
 		if (highestShowCommand == SHOWCOMMAND_ALERT)
 			SetForegroundWindow();
 	}
-	
+
 	void LogWnd::SetColour(COLORREF colour)
 	{
 		memset(&_charFormat, 0, sizeof(_charFormat));
@@ -273,23 +277,23 @@ namespace WndLib
 		_charFormat.dwMask = CFM_COLOR;
 		_charFormat.crTextColor = colour;
 	}
-	
-	void LogWnd::AllowUserToReadLog()
+
+	void LogWnd::WaitForUserToClose()
 	{
 		// Pump any remaining messages since we use a WM_USER to pass logs
 		// across threads.
 		PumpMessages();
-		
+
 		if (IsWindowVisible())
 			SetForegroundWindow();
-			
+
 		while (IsWindowVisible())
 		{
 			WaitMessage();
 			PumpMessages();
 		}
 	}
-	
+
 	void LogWnd::PumpMessages()
 	{
 		MSG msg;
@@ -318,7 +322,7 @@ namespace WndLib
 				ShowWindow(SW_HIDE);
 		}
 	}
-	
+
 	bool LogWnd::IsVisible()
 	{
 		return GetHWnd() && IsWindowVisible();

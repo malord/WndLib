@@ -20,8 +20,8 @@ namespace WndLib
 		if (! verinfosize)
 			return false;
 
-		Bytes verinfobuf;
-		verinfobuf.Realloc(verinfosize);
+		ByteArray verinfobuf;
+		verinfobuf.Resize(verinfosize);
 
 		if (! GetFileVersionInfo(filename, zerohandle, verinfosize, verinfobuf.Get()))
 			return false;

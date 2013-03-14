@@ -310,28 +310,28 @@ namespace WndLib
 	}
 
 	//
-	// Bytes
+	// ByteArray
 	//
 
-	Bytes::~Bytes()
+	ByteArray::~ByteArray()
 	{
 		if (_bytes)
 			free(_bytes);
 	}
 
-	Bytes::Bytes(const void *bytes, size_t size)
+	ByteArray::ByteArray(const void *bytes, size_t size)
 	{
 		_bytes = NULL;
 		Set(bytes, size);
 	}
 
-	Bytes::Bytes(const Bytes &copy)
+	ByteArray::ByteArray(const ByteArray &copy)
 	{
 		_bytes = NULL;
 		Set(copy._bytes, copy._size);
 	}
 
-	void Bytes::Set(const void *bytes, size_t size)
+	void ByteArray::Set(const void *bytes, size_t size)
 	{
 		if (_bytes)
 			free(_bytes);
@@ -349,7 +349,7 @@ namespace WndLib
 		}
 	}
 
-	Bytes &Bytes::operator = (const Bytes &copy)
+	ByteArray &ByteArray::operator = (const ByteArray &copy)
 	{
 		if (this != &copy)
 			Set(copy._bytes, copy._size);
@@ -357,7 +357,7 @@ namespace WndLib
 		return *this;
 	}
 
-	char *Bytes::Realloc(size_t newSize)
+	char *ByteArray::Resize(size_t newSize)
 	{
 		_bytes = (char *) realloc(_bytes, newSize);
 		_size = newSize;
@@ -372,6 +372,7 @@ namespace WndLib
 	CriticalSection Wnd::mapLock;
 
 	static Wnd *creatingWnd = 0;
+	static CriticalSection creationLock;
 
 	Wnd::Wnd()
 	{
@@ -604,7 +605,9 @@ namespace WndLib
 		}
 		else
 		{
-			// TODO: synchronise creatingWnd
+			// CriticalSections are recursive mutexes, so our thread can create
+			// multiple window while holding the lock.
+			CriticalSection::ScopedLock lock(creationLock);
 			creatingWnd = this;
 
 			HWND hwnd = DoCreateWindowEx(cs.dwExStyle, cs.lpszClass, cs.lpszName, cs.style,

@@ -98,7 +98,7 @@ namespace WndLib
 		return true;
 	}
 
-	void *RegistryKey::QueryValue(LPCTSTR subkey, LPCTSTR value, DWORD *typeout, Bytes *buffer) const
+	void *RegistryKey::QueryValue(LPCTSTR subkey, LPCTSTR value, DWORD *typeout, ByteArray *buffer) const
 	{
 		RegistryKey sub = Open(subkey);
 		if (! sub)
@@ -107,7 +107,7 @@ namespace WndLib
 		return sub.QueryValue(value, typeout, buffer);
 	}
 
-	void *RegistryKey::QueryValue(LPCTSTR value, DWORD *typeout, Bytes *buffer) const
+	void *RegistryKey::QueryValue(LPCTSTR value, DWORD *typeout, ByteArray *buffer) const
 	{
 		DWORD size;
 		if (! QueryValue(value, typeout, NULL, 0, &size))
@@ -115,7 +115,7 @@ namespace WndLib
 
 		DWORD sizeWithNull = (DWORD) (size + sizeof(TCHAR));
 
-		void *alloced = buffer->Realloc(sizeWithNull);
+		void *alloced = buffer->Resize(sizeWithNull);
 		if (! QueryValue(value, typeout, alloced, sizeWithNull, &size))
 			return NULL;
 
@@ -124,7 +124,7 @@ namespace WndLib
 		return alloced;
 	}
 
-	LPCTSTR RegistryKey::GetString(LPCTSTR subkey, LPCTSTR value, Bytes *buffer) const
+	LPCTSTR RegistryKey::GetString(LPCTSTR subkey, LPCTSTR value, ByteArray *buffer) const
 	{
 		RegistryKey sub = Open(subkey);
 		if (! sub)
@@ -133,7 +133,7 @@ namespace WndLib
 		return sub.GetString(value, buffer);
 	}
 
-	LPCTSTR RegistryKey::GetString(LPCTSTR value, Bytes *buffer) const
+	LPCTSTR RegistryKey::GetString(LPCTSTR value, ByteArray *buffer) const
 	{
 		DWORD type;
 		void *got = QueryValue(value, &type, buffer);
@@ -198,7 +198,7 @@ namespace WndLib
 		return RegistryKey(result, NULL);
 	}
 
-	bool RegistryKey::EnumKey(LPCTSTR subkey, DWORD index, LPCTSTR *nameout, Bytes *nameBuffer, LPCTSTR *classout, Bytes *classBuffer)
+	bool RegistryKey::EnumKey(LPCTSTR subkey, DWORD index, LPCTSTR *nameout, ByteArray *nameBuffer, LPCTSTR *classout, ByteArray *classBuffer)
 	{
 		RegistryKey sub = Open(subkey);
 		if (! sub)
@@ -207,7 +207,7 @@ namespace WndLib
 		return sub.EnumKey(index, nameout, nameBuffer, classout, classBuffer);
 	}
 
-	bool RegistryKey::EnumKey(DWORD index, LPCTSTR *nameout, Bytes *nameBuffer, LPCTSTR *classout, Bytes *classBuffer)
+	bool RegistryKey::EnumKey(DWORD index, LPCTSTR *nameout, ByteArray *nameBuffer, LPCTSTR *classout, ByteArray *classBuffer)
 	{
 		TCHAR namebuf[256];
 		TCHAR classbuf[64];
@@ -220,14 +220,14 @@ namespace WndLib
 
 		if (result == ERROR_SUCCESS)
 		{
-			*nameout = (LPCTSTR) nameBuffer->Realloc((nameSize + 1) * sizeof(TCHAR));
+			*nameout = (LPCTSTR) nameBuffer->Resize((nameSize + 1) * sizeof(TCHAR));
 			lstrcpy((LPTSTR) *nameout, namebuf);
 
 			if (classout)
 			{
 				WNDLIB_ASSERT(classBuffer);
 				*classout = (LPCTSTR)
-					classBuffer->Realloc((classSize + 1) * sizeof(TCHAR));
+					classBuffer->Resize((classSize + 1) * sizeof(TCHAR));
 				lstrcpy((LPTSTR) *classout, classbuf);
 			}
 
@@ -237,26 +237,26 @@ namespace WndLib
 		while (result == ERROR_MORE_DATA)
 		{
 			nameSize += 256;
-			*nameout = (LPCTSTR) nameBuffer->Realloc(nameSize * sizeof(TCHAR));
+			*nameout = (LPCTSTR) nameBuffer->Resize(nameSize * sizeof(TCHAR));
 
 			if (classout)
 			{
 				WNDLIB_ASSERT(classBuffer);
 				classSize += 256;
 				*classout =
-					(LPCTSTR) classBuffer->Realloc(classSize * sizeof(TCHAR));
+					(LPCTSTR) classBuffer->Resize(classSize * sizeof(TCHAR));
 			}
 
 			result = RegEnumKeyEx(_key, index, (LPTSTR) *nameout, &nameSize, NULL, classout ? (LPTSTR) *classout : NULL, classout ? &classSize : NULL, NULL);
 
 			if (result == ERROR_SUCCESS)
 			{
-				*nameout = (LPCTSTR) nameBuffer->Realloc((nameSize + 1) * sizeof(TCHAR));
+				*nameout = (LPCTSTR) nameBuffer->Resize((nameSize + 1) * sizeof(TCHAR));
 
 				if (classout)
 				{
 					*classout = (LPCTSTR)
-						classBuffer->Realloc((classSize + 1) * sizeof(TCHAR));
+						classBuffer->Resize((classSize + 1) * sizeof(TCHAR));
 				}
 
 				return true;
@@ -266,7 +266,7 @@ namespace WndLib
 		return false;
 	}
 
-	bool RegistryKey::EnumValue(LPCTSTR subkey, DWORD index, LPCTSTR *nameout, Bytes *nameBuffer, DWORD *typeout)
+	bool RegistryKey::EnumValue(LPCTSTR subkey, DWORD index, LPCTSTR *nameout, ByteArray *nameBuffer, DWORD *typeout)
 	{
 		RegistryKey sub = Open(subkey);
 		if (! sub)
@@ -275,7 +275,7 @@ namespace WndLib
 		return sub.EnumValue(index, nameout, nameBuffer, typeout);
 	}
 
-	bool RegistryKey::EnumValue(DWORD index, LPCTSTR *nameout, Bytes *nameBuffer, DWORD *typeout)
+	bool RegistryKey::EnumValue(DWORD index, LPCTSTR *nameout, ByteArray *nameBuffer, DWORD *typeout)
 	{
 		TCHAR namebuf[256];
 		DWORD type;
@@ -287,7 +287,7 @@ namespace WndLib
 		if (result == ERROR_SUCCESS)
 		{
 			++nameSize;
-			*nameout = (LPCTSTR) nameBuffer->Realloc(nameSize * sizeof(TCHAR));
+			*nameout = (LPCTSTR) nameBuffer->Resize(nameSize * sizeof(TCHAR));
 			lstrcpy((LPTSTR) *nameout, namebuf);
 
 			if (typeout)
@@ -299,7 +299,7 @@ namespace WndLib
 		while (result == ERROR_MORE_DATA)
 		{
 			nameSize += 32;
-			*nameout = (LPCTSTR) nameBuffer->Realloc(nameSize * sizeof(TCHAR));
+			*nameout = (LPCTSTR) nameBuffer->Resize(nameSize * sizeof(TCHAR));
 
 			result = RegEnumValue(_key, index, (LPTSTR) *nameout, &nameSize, NULL, &type, NULL, NULL);
 

@@ -1,6 +1,6 @@
 //
 // WndLib
-// Copyright (c) 1994-2012 Mark H. P. Lord. All rights reserved.
+// Copyright (c) 1994-2013 Mark H. P. Lord. All rights reserved.
 //
 // See LICENSE.txt for license.
 //
@@ -12,6 +12,9 @@
 
 namespace WndLib
 {
+	//
+	// VerInfo
+	//
 	// Reads version information from an executable or DLL.
 	//
 	// Example Usage:
@@ -27,7 +30,7 @@ namespace WndLib
 	//  		printf("Copyright: %s\n", vi.GetCopyright());
 	//  		printf("Comments: %s\n", vi.GetComments());
 	//  	}
-	// 
+	//
 	class WNDLIB_EXPORT VerInfo
 	{
 	public:

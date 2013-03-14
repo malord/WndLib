@@ -1,10 +1,9 @@
 //
 // WndLib
-// Copyright (c) 1994-2012 Mark H. P. Lord. All rights reserved.
+// Copyright (c) 1994-2013 Mark H. P. Lord. All rights reserved.
 //
 // See LICENSE.txt for license.
 //
-
 
 #ifndef WNDLIB_REGISTRYKEY_H
 #define WNDLIB_REGISTRYKEY_H
@@ -13,7 +12,10 @@
 
 namespace WndLib
 {
-	// A wrapper around Windows' registry API.
+	//
+	// RegistryKey: A wrapper around Windows' registry API.
+	//
+
 	class WNDLIB_EXPORT RegistryKey
 	{
 	public:
@@ -58,16 +60,16 @@ namespace WndLib
 		bool QueryValue(LPCTSTR value, DWORD *typeout, void *buffer, DWORD buffersize, DWORD *sizeout) const;
 
 		// Read the value of a key. See RegQueryValueEx.
-		void *QueryValue(LPCTSTR subkey, LPCTSTR value, DWORD *typeout, Bytes *buffer) const;
+		void *QueryValue(LPCTSTR subkey, LPCTSTR value, DWORD *typeout, ByteArray *buffer) const;
 
 		// Read the value of this key. See RegQueryValueEx.
-		void *QueryValue(LPCTSTR value, DWORD *typeout, Bytes *buffer) const;
+		void *QueryValue(LPCTSTR value, DWORD *typeout, ByteArray *buffer) const;
 
 		// Read a REG_SZ or REG_EXPAND_SZ from the key.
-		LPCTSTR GetString(LPCTSTR subkey, LPCTSTR value, Bytes *buffer) const;
+		LPCTSTR GetString(LPCTSTR subkey, LPCTSTR value, ByteArray *buffer) const;
 
 		// Read a REG_SZ or REG_EXPAND_SZ from the key.
-		LPCTSTR GetString(LPCTSTR value, Bytes *buffer) const;
+		LPCTSTR GetString(LPCTSTR value, ByteArray *buffer) const;
 
 		// Set the value of a key. See RegSetValueEx.
 		bool SetValue(LPCTSTR subkey, LPCTSTR value, DWORD type, const BYTE *data, DWORD datasize);
@@ -88,16 +90,16 @@ namespace WndLib
 		RegistryKey CreateKey(LPCTSTR subkey);
 
 		// Enumerate the contents of a key.
-		bool EnumKey(LPCTSTR subkey, DWORD index, LPCTSTR *nameout, Bytes *nameBuffer, LPCTSTR *classout = NULL, Bytes *classBuffer = NULL);
+		bool EnumKey(LPCTSTR subkey, DWORD index, LPCTSTR *nameout, ByteArray *nameBuffer, LPCTSTR *classout = NULL, ByteArray *classBuffer = NULL);
 
 		// Enumerate the contents of this key.
-		bool EnumKey(DWORD index, LPCTSTR *nameout, Bytes *nameBuffer, LPCTSTR *classout = NULL, Bytes *classBuffer = NULL);
+		bool EnumKey(DWORD index, LPCTSTR *nameout, ByteArray *nameBuffer, LPCTSTR *classout = NULL, ByteArray *classBuffer = NULL);
 
 		// Enumerate the values of a key.
-		bool EnumValue(LPCTSTR subkey, DWORD index, LPCTSTR *nameout, Bytes *nameBuffer, DWORD *typeout = NULL);
+		bool EnumValue(LPCTSTR subkey, DWORD index, LPCTSTR *nameout, ByteArray *nameBuffer, DWORD *typeout = NULL);
 
 		// Enumerate the values of this key.
-		bool EnumValue(DWORD index, LPCTSTR *nameout, Bytes *nameBuffer, DWORD *typeout = NULL);
+		bool EnumValue(DWORD index, LPCTSTR *nameout, ByteArray *nameBuffer, DWORD *typeout = NULL);
 
 	private:
 

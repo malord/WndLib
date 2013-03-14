@@ -1,6 +1,6 @@
 //
 // WndLib
-// Copyright (c) 1994-2012 Mark H. P. Lord. All rights reserved.
+// Copyright (c) 1994-2013 Mark H. P. Lord. All rights reserved.
 //
 // See LICENSE.txt for license.
 //
@@ -225,9 +225,105 @@ namespace WndLib
 
 	WNDLIB_EXPORT HFONT CreateStatusFont();
 
+	//
+	// ByteArray: A resizable array of bytes.
+	//
+
+	class WNDLIB_EXPORT ByteArray
+	{
+	public:
+
+		ByteArray() :
+			_bytes(NULL),
+			_size(0)
+		{}
+
+		ByteArray(const void *bytes, size_t size);
+
+		ByteArray(const ByteArray &copy);
+
+		ByteArray &operator = (const ByteArray &copy);
+
+		~ByteArray();
+
+		char *Resize(size_t newSize);
+
+		void Set(const void *bytes, size_t size);
+
+		char *Get() const
+		{
+			return _bytes;
+		}
+
+		size_t GetSize() const
+		{
+			return _size;
+		}
+
+	private:
+
+		char *_bytes;
+		size_t _size;
+	};
+
+	//
+	// DataArray: A resizable array of any POD type.
+	//
+
+	template<typename Type>
+	class DataArray
+	{
+	public:
+
+		DataArray()
+		{}
+
+		DataArray(const Type *array, size_t size) :
+			_bytes(array, size * sizeof(Type))
+		{}
+
+		DataArray(const DataArray &copy) :
+			_bytes(copy._bytes)
+		{}
+
+		DataArray &operator = (const DataArray &copy)
+		{
+			_bytes = copy._bytes;
+			return *this;
+		}
+
+		Type *Resize(size_t newSize)
+		{
+			return (Type *) _bytes.Resize(newSize * sizeof(Type));
+		}
+
+		void Set(const void *bytes, size_t size)
+		{
+			_bytes.Set(bytes, size * sizeof(Type));
+		}
+
+		Type *Get() const
+		{
+			return (Type *) _bytes.Get();
+		}
+
+		size_t GetSize() const
+		{
+			return _bytes.GetSize() / sizeof(Type);
+		}
+
+	private:
+
+		ByteArray _bytes;
+	};
+
+	//
+	// CriticalSection: Wrapper around CRITICAL_SECTION.
+	//
+
 	namespace Private
 	{
-		// Locks a threading primitive for as long as it exists.
+		// Locks a threading primitive until destructed.
 		template<class LockType>
 		class ScopedLock
 		{
@@ -324,53 +420,6 @@ namespace WndLib
 		};
 	}
 
-	//
-	// Bytes
-	//
-
-	// Stores an array of bytes.
-	class WNDLIB_EXPORT Bytes
-	{
-	public:
-
-		Bytes() :
-			_bytes(NULL),
-			_size(0)
-		{}
-
-		Bytes(const void *bytes, size_t size);
-
-		Bytes(const Bytes &copy);
-
-		Bytes &operator = (const Bytes &copy);
-
-		~Bytes();
-
-		char *Realloc(size_t newSize);
-
-		void Set(const void *bytes, size_t size);
-
-		char *Get() const
-		{
-			return _bytes;
-		}
-
-		size_t GetSize() const
-		{
-			return _size;
-		}
-
-	private:
-
-		char *_bytes;
-		size_t _size;
-	};
-
-	//
-	// CriticalSection
-	//
-
-	// A thin wrapper around a CRITICAL_SECTION.
 	class CriticalSection
 	{
 	public:
@@ -413,7 +462,7 @@ namespace WndLib
 	//
 	// class MyWnd : public BaseClassWnd
 	// {
-	//     WND_WM_DECLARE(CMyWnd, CBaseClassWnd)
+	//     WND_WM_DECLARE(MyWnd, BaseClassWnd)
 	//     WND_WM_FUNC(OnCreate)
 	//     WND_WM_FUNC(OnPaint)
 	//     ...
@@ -423,7 +472,7 @@ namespace WndLib
 	//
 	// // In the source file:
 	//
-	// WND_WM_BEGIN(CMyWnd, CBaseClassWnd)
+	// WND_WM_BEGIN(MyWnd, BaseClassWnd)
 	//     WND_WM(WM_CREATE, OnCreate)
 	//     WND_WM(WM_PAINT, OnPaint)
 	//     ...
@@ -1036,7 +1085,7 @@ namespace WndLib
 	};
 
 	//
-	// StaticWnd: Windows static control
+	// StaticWnd
 	//
 
 	class WNDLIB_EXPORT StaticWnd : public Wnd
@@ -1072,7 +1121,7 @@ namespace WndLib
 	};
 
 	//
-	// ButtonWnd: Windows button control
+	// ButtonWnd
 	//
 
 	class WNDLIB_EXPORT ButtonWnd : public Wnd
@@ -1123,7 +1172,7 @@ namespace WndLib
 	};
 
 	//
-	// EditWnd: Windows edit control
+	// EditWnd
 	//
 
 	class WNDLIB_EXPORT EditWnd : public Wnd
@@ -1320,7 +1369,7 @@ namespace WndLib
 	};
 
 	//
-	// ListBoxWnd: Windows list box control
+	// ListBoxWnd
 	//
 
 	class WNDLIB_EXPORT ListBoxWnd : public Wnd
@@ -1499,7 +1548,7 @@ namespace WndLib
 	};
 
 	//
-	// ComboBoxWnd: Windows combo box control
+	// ComboBoxWnd
 	//
 
 	class WNDLIB_EXPORT ComboBoxWnd : public Wnd
@@ -1760,7 +1809,7 @@ namespace WndLib
 	};
 
 	//
-	// RichEditWnd: RICHEDIT 1.0
+	// RichEditWnd
 	//
 
 	class WNDLIB_EXPORT RichEditWnd : public EditWnd
@@ -2085,7 +2134,7 @@ namespace WndLib
 	};
 
 	//
-	// RichEdit2Wnd: RICHEDIT 2.0
+	// RichEdit2Wnd
 	//
 
 	class WNDLIB_EXPORT RichEdit2Wnd : public RichEditWnd
@@ -2282,7 +2331,7 @@ namespace WndLib
 	};
 
 	//
-	// ComboBoxExWnd: Represents the ComboBoxEx common control.
+	// ComboBoxExWnd
 	//
 
 	class WNDLIB_EXPORT ComboBoxExWnd : public ComboBoxWnd
@@ -2357,7 +2406,7 @@ namespace WndLib
 	};
 
 	//
-	// DateTimePickerWnd: Represents the DateTimePicker common control.
+	// DateTimePickerWnd
 	//
 
 	class WNDLIB_EXPORT DateTimePickerWnd : public Wnd
@@ -2420,7 +2469,7 @@ namespace WndLib
 	};
 
 	//
-	// HotKeyWnd: Represents the HotKey common control.
+	// HotKeyWnd
 	//
 
 	class WNDLIB_EXPORT HotKeyWnd : public Wnd
@@ -2452,7 +2501,7 @@ namespace WndLib
 	};
 
 	//
-	// IPAddressWnd: Represents the IPAddress common control.
+	// IPAddressWnd
 	//
 
 	#if _WIN32_IE >= 0x400
@@ -2500,7 +2549,7 @@ namespace WndLib
 	#endif // _WIN32_IE >= 0x400
 
 	//
-	// ListViewWnd: List view common control
+	// ListViewWnd
 	//
 
 	class WNDLIB_EXPORT ListViewWnd : public Wnd
@@ -2854,7 +2903,7 @@ namespace WndLib
 	};
 
 	//
-	// ProgressBarWnd: List view common control
+	// ProgressBarWnd
 	//
 
 	class WNDLIB_EXPORT ProgressBarWnd : public Wnd
@@ -2916,7 +2965,7 @@ namespace WndLib
 	};
 
 	//
-	// TabControlWnd: List view common control
+	// TabControlWnd
 	//
 
 	class WNDLIB_EXPORT TabControlWnd : public Wnd
@@ -3226,7 +3275,7 @@ namespace WndLib
 	};
 
 	//
-	// ToolbarWnd: Represents the tool bar common control.
+	// ToolbarWnd
 	//
 
 	class WNDLIB_EXPORT ToolbarWnd : public Wnd
@@ -3568,7 +3617,7 @@ namespace WndLib
 	};
 
 	//
-	// RebarWnd: Represents the tool bar common control.
+	// RebarWnd
 	//
 
 	#if _WIN32_IE >= 0x400
@@ -3731,7 +3780,7 @@ namespace WndLib
 	#endif // _WIN32_IE >= 0x400
 
 	//
-	// StatusBarWnd: The status bar common control
+	// StatusBarWnd
 	//
 
 	class WNDLIB_EXPORT StatusBarWnd : public Wnd
@@ -3832,7 +3881,7 @@ namespace WndLib
 	};
 
 	//
-	// ToolTipWnd: List view common control
+	// ToolTipWnd
 	//
 
 	class WNDLIB_EXPORT ToolTipWnd : public Wnd
@@ -4147,7 +4196,7 @@ namespace WndLib
 	};
 
 	//
-	// TreeViewWnd: List view common control
+	// TreeViewWnd
 	//
 
 	class WNDLIB_EXPORT TreeViewWnd : public Wnd
@@ -4353,7 +4402,7 @@ namespace WndLib
 	};
 
 	//
-	// UpDownWnd: List view common control
+	// UpDownWnd
 	//
 
 	class WNDLIB_EXPORT UpDownWnd : public Wnd
@@ -4444,7 +4493,10 @@ namespace WndLib
 		}
 	};
 
-	// Loads the icons from an .exe or .dll.
+	//
+	// ModuleIcons: Loads icons from an .exe or .dll.
+	//
+
 	class WNDLIB_EXPORT ModuleIcons
 	{
 	public:

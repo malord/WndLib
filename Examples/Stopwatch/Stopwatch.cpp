@@ -34,6 +34,7 @@ class StopwatchWnd : public Wnd
 	WND_WM_FUNC(OnTimer)
 	WND_WM_FUNC(OnPaint)
 	WND_WM_FUNC(OnCtlColorBtn)
+	WND_WM_FUNC(OnLButtonDown)
 	
 public:
 
@@ -69,6 +70,8 @@ private:
 	void SetStartButtonText();
 	void CreateBigFont();
 
+	void Log(const TCHAR *event);
+
 	ButtonWnd _startButton;
 	ButtonWnd _resetButton;
 	RECT _time;
@@ -98,6 +101,7 @@ WND_WM_BEGIN(StopwatchWnd, Wnd)
 	WND_WM_COMMAND(ID_STARTSTOP, OnStartStop)
 	WND_WM_COMMAND(ID_RESET, OnReset)
 	WND_WM(WM_TIMER, OnTimer)
+	WND_WM(WM_LBUTTONDOWN, OnLButtonDown)
 WND_WM_END()
 
 StopwatchWnd::StopwatchWnd()
@@ -144,8 +148,8 @@ LRESULT StopwatchWnd::OnCreate(UINT msg, WPARAM wparam, LPARAM lparam)
 		if (! _logWnd.Create(TEXT("Stopwatch Log"), NULL))
 			return -1;
 
-		_logWnd.Log(TEXT("This is the log window. If you close it, it won't come back until you restart Stopwatch.\n"), 
-			RGB(128, 128, 128), LogWnd::SHOWCOMMAND_NO_CHANGE);
+		_logWnd.Log(TEXT("This is the log window. If you close it, it won't come back unless there's an alert.\n"), 
+			RGB(0, 128, 255), LogWnd::SHOWCOMMAND_NO_CHANGE);
 	#endif
 		
 	_font = CreateShellFont();
@@ -249,6 +253,8 @@ LRESULT StopwatchWnd::OnStartStop(UINT, WPARAM, LPARAM)
 {
 	if (! _timerRunning)
 	{
+		Log(TEXT("Started"));
+
 		_timerRunning = SetTimer(ID_TIMERTICK, 50, NULL) != 0;
 			
 		if (_timerRunning)
@@ -262,6 +268,8 @@ LRESULT StopwatchWnd::OnStartStop(UINT, WPARAM, LPARAM)
 		
 		KillTimer(ID_TIMERTICK);
 		_timerRunning = false;
+
+		Log(TEXT("Stopped"));
 	}
 	
 	SetStartButtonText();
@@ -279,11 +287,7 @@ void StopwatchWnd::SetStartButtonText()
 
 LRESULT StopwatchWnd::OnReset(UINT, WPARAM, LPARAM)
 {
-	#ifdef WNDLIB_LOGWND_H
-		TCHAR time[128];
-		FormatTime(GetElapsedSeconds(), time, sizeof(time));
-		_logWnd.Format(RGB(0, 128, 0), LogWnd::SHOWCOMMAND_SHOW_IN_BACKGROUND, TEXT("Reset at %s\n"), time);
-	#endif
+	Log(TEXT("Reset"));
 
 	if (_timerRunning)
 	{
@@ -306,6 +310,15 @@ LRESULT StopwatchWnd::OnTimer(UINT msg, WPARAM wparam, LPARAM lparam)
 	Draw(hdc);
 	ReleaseDC(hdc);
 	
+	return BaseWndProc(msg, wparam, lparam);
+}
+
+LRESULT StopwatchWnd::OnLButtonDown(UINT msg, WPARAM wparam, LPARAM lparam)
+{
+	#ifdef WNDLIB_LOGWND_H
+		_logWnd.Format(RGB(255, 0, 0), LogWnd::SHOWCOMMAND_ALERT, TEXT("Don't click there!\n"));
+	#endif
+
 	return BaseWndProc(msg, wparam, lparam);
 }
 
@@ -379,10 +392,10 @@ void StopwatchWnd::Draw(HDC hdc)
 		oldFont = (HFONT) SelectObject(hdc, _bigFont);	
 
 	TCHAR time[128];
-	FormatTime(GetElapsedSeconds(), time, sizeof(time));
+	FormatTime(GetElapsedSeconds(), time, WNDLIB_COUNTOF(time));
 	
 	TCHAR buf[128];
-	SNTPrintf(buf, sizeof(buf), TEXT("     %s     "), time); 
+	SNTPrintf(buf, WNDLIB_COUNTOF(buf), TEXT("     %s     "), time); 
 		
 	SetTextColor(hdc, RGB(100, 255, 0));
 	SetBkColor(hdc, RGB(0, 0, 0));
@@ -400,6 +413,17 @@ void StopwatchWnd::Redraw()
 	HDC hdc = GetDC();
 	Draw(hdc);
 	ReleaseDC(hdc);
+}
+
+void StopwatchWnd::Log(const TCHAR *event)
+{
+	#ifdef WNDLIB_LOGWND_H
+		TCHAR time[128];
+		FormatTime(GetElapsedSeconds(), time, WNDLIB_COUNTOF(time));
+		_logWnd.Format(RGB(0, 128, 0), LogWnd::SHOWCOMMAND_SHOW_IN_BACKGROUND, TEXT("%s at %s\n"), event, time);
+	#else
+		(void) event;
+	#endif
 }
 
 //

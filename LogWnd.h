@@ -1,6 +1,6 @@
 //
 // WndLib
-// Copyright (c) 1994-2012 Mark H. P. Lord. All rights reserved.
+// Copyright (c) 1994-2013 Mark H. P. Lord. All rights reserved.
 //
 // See LICENSE.txt for license.
 //
@@ -12,7 +12,10 @@
 
 namespace WndLib
 {
-	// A thread-safe logging window.
+	//
+	// LogWnd: A thread-safe logging window with colourised output.
+	//
+
 	class WNDLIB_EXPORT LogWnd : public Wnd
 	{
 		WND_WM_DECLARE(LogWnd, Wnd)
@@ -22,15 +25,15 @@ namespace WndLib
 		WND_WM_FUNC(OnSize)
 		WND_WM_FUNC(OnUser)
 		WND_WM_FUNC(OnSetFocus)
-		
+
 	public:
 
 		LogWnd();
-		
+
 		~LogWnd();
 
 		bool Create(LPCTSTR title, HWND parent = NULL);
-		
+
 		enum ShowCommand
 		{
 			// The window is not shown if it's hidden.
@@ -56,31 +59,37 @@ namespace WndLib
 		void ProcessQueue();
 
 		// Pumps messages until the log window is closed.
-		void AllowUserToReadLog();
-		
+		void WaitForUserToClose();
+
+		// Old name.
+		void AllowUserToReadLog()
+		{
+			WaitForUserToClose();
+		}
+
 		void SetVisible(bool visible, bool inBackground = false);
-		
+
 		bool IsVisible();
-		
+
 		// Make sure the edit control's caret is visible.
 		void ScrollEditControl();
-		
+
 		// Wnd overrides
 		virtual LPCTSTR GetClassName();
-		
+
 	private:
 
 		void AppendEditControl(LPCTSTR string, ptrdiff_t length = -1);
-		
+
 		void AppendEditControlRaw(LPCTSTR string, ptrdiff_t length = -1);
-	
+
 		void SetColour(COLORREF colour);
 
 		static void PumpMessages();
-		
+
 		struct LogEntry
 		{
-			Bytes bytes;
+			DataArray<TCHAR> text;
 			COLORREF colour;
 			ShowCommand showCommand;
 			LogEntry *next;
@@ -89,11 +98,11 @@ namespace WndLib
 		RichEdit2Wnd _edit;
 		HFONT _font;
 		CHARFORMAT _charFormat;
-		
+
 		CriticalSection _cs;
 		LogEntry *_logEntry;
 		LogEntry *_lastLogEntry;
-		
+
 		bool _userDidClose;
 		ModuleIcons _icons;
 	};
