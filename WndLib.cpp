@@ -102,7 +102,6 @@ namespace
 		bool found;
 	};
 
-	// Callback routine for font enumeration
 	static int CALLBACK FontEnumProc(const LOGFONT *lf, const TEXTMETRIC *,
 		DWORD, LPARAM lpData)
 	{
@@ -126,7 +125,7 @@ namespace WndLib
 
 	namespace Private
 	{
-		HINSTANCE wndHInstance;
+		HINSTANCE hInstance;
 	}
 
 	//
@@ -174,8 +173,6 @@ namespace WndLib
 		SetWindowPos(window, NULL, rwnd.left, rwnd.top, 0, 0, SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOSIZE);
 	}
 
-	// Returns true if "parent" is the parent, grandparent, great-grandparent,
-	// etc., of "child"
 	bool IsAncestorOfWindow(HWND parent, HWND child)
 	{
 		if (child == parent)
@@ -191,49 +188,92 @@ namespace WndLib
 		}
 	}
 
-	TCHAR *NewTStr(LPCTSTR str)
+	TCHAR *TNewString(LPCTSTR str)
 	{
 		size_t count = lstrlen(str) + 1;
 
-		TCHAR *buf = new TCHAR[count];
-		if (! buf)
+		TCHAR *buffer = new TCHAR[count];
+		if (! buffer)
 			return 0;
 
-		memcpy(buf, str, count * sizeof(TCHAR));
-		return buf;
+		memcpy(buffer, str, count * sizeof(TCHAR));
+		return buffer;
 	}
 
-	void VSNTPrintf(TCHAR *buf, size_t bufSize, const TCHAR *fmt, va_list argptr)
+	void Tvsnprintf(TCHAR *buffer, size_t bufferSize, const TCHAR *fmt, va_list argptr)
 	{
-		buf[0] = 0;
+		buffer[0] = 0;
 		#ifdef _MSC_VER
 		#pragma warning(disable:4996)
 		#endif
 		#ifdef WNDLIB_UNICODE
-			_vsnwprintf(buf, bufSize, fmt, argptr);
+			_vsnwprintf(buffer, bufferSize, fmt, argptr);
 		#else
-			_vsnprintf(buf, bufSize, fmt, argptr);
+			_vsnprintf(buffer, bufferSize, fmt, argptr);
 		#endif
 		#ifdef _MSC_VER
 		#pragma warning(default:4996)
 		#endif
-		buf[bufSize - 1] = 0;
+		buffer[bufferSize - 1] = 0;
 	}
 
-	void SNTPrintf(TCHAR *buf, size_t bufSize, const TCHAR *fmt, ...)
+	void Tsnprintf(TCHAR *buffer, size_t bufferSize, const TCHAR *fmt, ...)
 	{
 		va_list argptr;
 		va_start(argptr, fmt);
-		VSNTPrintf(buf, bufSize, fmt, argptr);
+		Tvsnprintf(buffer, bufferSize, fmt, argptr);
 		va_end(argptr);
 	}
 
-	//
-	// EasyCreateFont
-	//
+	bool Tstrcpy(TCHAR *buffer, size_t bufferSize, const TCHAR *src)
+	{
+		if (! bufferSize)
+			return false;
 
-	// Create font for the specified device context. "decipts" is
-	// points * 10, so 80 is 8 points.
+		TCHAR *terminator = buffer + bufferSize - 1;
+
+		while (*src) {
+			if (buffer == terminator) {
+				*buffer = 0;
+				return false;
+			}
+
+			*buffer++ = *src++;
+		}
+
+		*buffer = 0;
+		return true;
+	}
+
+	bool Tstrcat(TCHAR *buffer, size_t bufferSize, const TCHAR *src)
+	{
+		size_t length = lstrlen(buffer);
+
+		if (length >= bufferSize)
+			return false;
+
+		return Tstrcpy(buffer + length, bufferSize - length, src);
+	}
+
+	double GetDPIScale(HDC hdc)
+	{
+		BOOL releaseDC = FALSE;
+
+		if (! hdc)
+		{
+			hdc = GetDC(NULL);
+			releaseDC = TRUE;
+		}
+
+		int y = GetDeviceCaps(hdc, LOGPIXELSY);
+		double scale = (double) y / 96.0;
+
+		if (releaseDC)
+			ReleaseDC(NULL, hdc);
+
+		return scale;
+	}
+
 	HFONT EasyCreateFont(HDC hdc, LPCTSTR facename, int decipts, int flags)
 	{
 		POINT pt;
@@ -379,7 +419,6 @@ namespace WndLib
 		Construct();
 	}
 
-	// This constructor attaches or subclasses the specified handle.
 	Wnd::Wnd(HWND hwnd, bool subclass)
 	{
 		Construct();
@@ -388,109 +427,88 @@ namespace WndLib
 
 	void Wnd::Construct()
 	{
-		_hwnd = NULL;
+		_hwndx = NULL;
 		_prevproc = NULL;
 		_selfDestruct = false;
-		_autoDestroy = true;
 	}
 
 	Wnd::~Wnd()
 	{
-		_selfDestruct = true;
-
-		// You should call DestroyWindow in your destructor (if its called here then
-		// the wrong window procedure will run as the vtable has been destructed)
-		WNDLIB_ASSERT(_hwnd == NULL);
-
 		Unmap(this);
 	}
 
-	// Ask the Wnd to destroy itself
 	void Wnd::SelfDestruct()
 	{
 		delete this;
 	}
 
-	// Attach the specified HWND to this object, optionally subclassing it.
 	bool Wnd::Attach(HWND hwnd, bool subclass)
 	{
-		bool alreadyAttached = FindWnd(hwnd) != 0;
-
 		if (! hwnd)
 			return false;
 
 		Detach();
 
+		bool alreadyAttached = FindWnd(hwnd) != NULL;
 		if (! alreadyAttached && ! Map(hwnd, this))
 			return false;
 
-		_hwnd = hwnd;
+		_hwndx = hwnd;
 
 		if (subclass)
 		{
-			_prevproc = HelpGetWndProc(_hwnd);
-			HelpSetWndProc(_hwnd, &SubclassWndProc);
+			_prevproc = HelpGetWndProc(_hwndx);
+			HelpSetWndProc(_hwndx, &SubclassWndProc);
 		}
 
 		return true;
 	}
 
-	// Simple form of Attach, does not map the HWND to this object, which
-	// means this function can be used to assign multiple objects to the
-	// same HWND
 	void Wnd::SetHWnd(HWND hwnd)
 	{
-		_hwnd = hwnd;
+		_hwndx = hwnd;
 	}
 
-	// Detach this object from the window.
 	HWND Wnd::Detach()
 	{
 		if (_prevproc)
 		{
-			if (HelpGetWndProc(_hwnd) == &SubclassWndProc)
+			if (HelpGetWndProc(_hwndx) == &SubclassWndProc)
 			{
-				HelpSetWndProc(_hwnd, _prevproc);
+				HelpSetWndProc(_hwndx, _prevproc);
 			}
 			else
 			{
-				// Oh dear...
 				OutputDebugStringA(
 					"Wnd::Detach: unable to un-subclass window "
 					"(using window's window class).\r\n");
-				HelpSetWndProc(_hwnd, HelpGetClassWndProc(_hwnd));
+				HelpSetWndProc(_hwndx, HelpGetClassWndProc(_hwndx));
 			}
 
 			_prevproc = NULL;
 		}
 
-		HWND hwnd = _hwnd;
-		_hwnd = NULL;
-		if (FindWnd(hwnd) == this)
-			Unmap(hwnd);
+		HWND hwnd = _hwndx;
+		Unmap(this);
 		return hwnd;
 	}
 
-	// Destroy the window.
 	BOOL Wnd::DestroyWindow()
 	{
-		BOOL result = ::DestroyWindow(_hwnd);
+		BOOL result = ::DestroyWindow(GetHWnd());
 
-		_hwnd = NULL;
+		Unmap(this);
+
 		_prevproc = NULL;
 
 		return result;
 	}
 
-	// In this library, unlike MFC, a Wnd is designed to correspond to a
-	// WNDCLASS. This function should return the name of this class, as a
-	// unique name for a WNDCLASS.
 	LPCTSTR Wnd::GetClassName()
 	{
 		return TEXT("Wnd");
 	}
 
-	// Initialise a WNDCLASS structure prior to creating the window.
 	void Wnd::GetWndClass(WNDCLASSEX *wc)
 	{
 		memset(wc, 0, sizeof(*wc));
@@ -502,10 +520,9 @@ namespace WndLib
 		wc->hCursor = LoadCursor(NULL, IDC_ARROW);
 		wc->hIcon = LoadIcon(NULL, IDI_WINLOGO);
 		wc->hIconSm = LoadIcon(NULL, IDI_WINLOGO);
-		wc->hInstance = GetInstanceHandle();
+		wc->hInstance = GetHInstance();
 		wc->lpfnWndProc = (WNDPROC) &StaticWndProc;
 		wc->lpszMenuName = NULL;
-		//wc->style = CS_HREDRAW | CS_VREDRAW | CS_GLOBALCLASS;
 		wc->style = CS_HREDRAW | CS_VREDRAW;
 	}
 
@@ -547,7 +564,6 @@ namespace WndLib
 		}
 	}
 
-	// Work out which DefWindowProc to use
 	WNDPROC Wnd::GetDefWindowProc(const CREATESTRUCT &cs)
 	{
 		if (cs.dwExStyle & WS_EX_MDICHILD)
@@ -556,8 +572,6 @@ namespace WndLib
 			return ::DefWindowProc;
 	}
 
-	// Create a window, getting the parameters from the specified
-	// CREATESTRUCT.
 	bool Wnd::CreateIndirect(const CREATESTRUCT &cs, bool subclass)
 	{
 		// If "true", then we will have to attach to the newly created window.
@@ -567,7 +581,7 @@ namespace WndLib
 		_defWindowProc = GetDefWindowProc(cs);
 
 		// Check the window class
-		if (cs.hInstance == GetInstanceHandle())
+		if (cs.hInstance == GetHInstance())
 		{
 			WNDCLASSEX wc;
 			memset(&wc, 0, sizeof(wc));
@@ -638,7 +652,7 @@ namespace WndLib
 		if (! wnd)
 		{
 			wnd = creatingWnd;
-			creatingWnd = 0;
+			creatingWnd = NULL;
 
 			if (! wnd)
 			{
@@ -649,17 +663,14 @@ namespace WndLib
 			Map(hwnd, wnd);
 
 			HelpSetWindowPtr(hwnd, 0, (const void *) wnd);
-			wnd->_hwnd = hwnd;
+			wnd->_hwndx = hwnd;
 		}
 
-		LRESULT result;
-
-		result = wnd->WndProc(msg, wparam, lparam);
+		LRESULT result = wnd->WndProc(msg, wparam, lparam);
 
 		if (msg == WM_NCDESTROY)
 		{
-			wnd->_hwnd = NULL;
-			Unmap(hwnd);
+			Unmap(wnd);
 
 			if (wnd->_selfDestruct)
 			{
@@ -670,8 +681,6 @@ namespace WndLib
 		return result;
 	}
 
-	// Create a window. Called CreateEx, rather than Create, to allow
-	// derived class to have their own specialised Create.
 	bool Wnd::CreateEx(DWORD exStyle, LPCTSTR windowName, DWORD style,
 		int x, int y, int width, int height, HWND parent, HMENU menu,
 		HINSTANCE instance, LPVOID params, bool subclass)
@@ -695,15 +704,14 @@ namespace WndLib
 		return CreateIndirect(cs, subclass);
 	}
 
-	// Our window procedure.
 	LRESULT Wnd::WndProc(UINT msg, WPARAM wparam, LPARAM lparam)
 	{
 		if (_prevproc)
 		{
-   			return ::CallWindowProc(_prevproc, _hwnd, msg, wparam, lparam);
+   			return ::CallWindowProc(_prevproc, GetHWnd(), msg, wparam, lparam);
 		}
 
-		return (*_defWindowProc) (_hwnd, msg, wparam, lparam);
+		return (*_defWindowProc) (GetHWnd(), msg, wparam, lparam);
 	}
 
 	bool Wnd::Map(HWND hwnd, Wnd *wnd)
@@ -731,27 +739,11 @@ namespace WndLib
 		return true;
 	}
 
-	bool Wnd::Unmap(HWND hwnd)
-	{
-		CriticalSection::ScopedLock lock(mapLock);
-
-		WndMapping **prev = &mapStart;
-		for (WndMapping *m = mapStart; m; prev = &m->next, m = m->next)
-		{
-			if (m->hwnd == hwnd)
-			{
-				*prev = m->next;
-				delete m;
-				return true;
-			}
-		}
-
-		return false;
-	}
-
 	bool Wnd::Unmap(Wnd *wnd)
 	{
 		CriticalSection::ScopedLock lock(mapLock);
+
+		wnd->_hwndx = NULL;
 
 		WndMapping **prev = &mapStart;
 		for (WndMapping *m = mapStart; m; prev = &m->next, m = m->next)
@@ -777,21 +769,18 @@ namespace WndLib
 				return m->wnd;
 		}
 
-		return 0;
+		return NULL;
 	}
 
 	LRESULT WINAPI Wnd::SubclassWndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 	{
-		Wnd *wnd = FindWnd(hwnd);
-
-		if (wnd)
+		if (Wnd *wnd = FindWnd(hwnd))
 		{
-			LRESULT res = wnd->WndProc(msg, wparam, lparam);
+			LRESULT result = wnd->WndProc(msg, wparam, lparam);
 
 			if (msg == WM_NCDESTROY)
 			{
-				Unmap(hwnd);
-				wnd->_hwnd = NULL;
+				Unmap(wnd);
 
 				if (wnd->_selfDestruct)
 				{
@@ -799,14 +788,12 @@ namespace WndLib
 				}
 			}
 
-			return res;
+			return result;
 		}
 
-		//return ::CallWindowProc(HelpGetClassWndProc(hwnd), hwnd, msg, wparam, lparam);
 		return ::DefWindowProc(hwnd, msg, wparam, lparam);
 	}
 
-	// Set the size of this window's client area
 	void Wnd::SetClientAreaSize(int cx, int cy)
 	{
 		RECT rwnd;
@@ -861,7 +848,7 @@ namespace WndLib
 	{
 		TCHAR title[256] = { 0 };
 		GetWindowText(title, WNDLIB_COUNTOF(title));
-		return ::MessageBox(_hwnd, text, title, type);
+		return ::MessageBox(GetHWnd(), text, title, type);
 	}
 
 	bool Wnd::GetDlgItemInt(int id, int *out)
@@ -869,7 +856,7 @@ namespace WndLib
 		WNDLIB_ASSERT(0 != out);
 
 		BOOL translated;
-		*out = (INT)::GetDlgItemInt(_hwnd, id, &translated, TRUE);
+		*out = (INT)::GetDlgItemInt(GetHWnd(), id, &translated, TRUE);
 
 		if (! translated)
 			return FALSE;
@@ -882,7 +869,7 @@ namespace WndLib
 		WNDLIB_ASSERT(0 != out);
 
 		BOOL translated;
-		*out = (UINT)::GetDlgItemInt(_hwnd, id, &translated, FALSE);
+		*out = (UINT)::GetDlgItemInt(GetHWnd(), id, &translated, FALSE);
 
 		if (! translated)
 			return FALSE;
@@ -901,18 +888,57 @@ namespace WndLib
 		}
 	}
 
+	LPCTSTR Wnd::GetWindowText(ByteArray *buffer)
+	{
+		DWORD len = GetTextLength();
+		buffer->Resize((len + 1) * 2);
+		GetWindowText((TCHAR *) buffer->Get(), len + 1);
+		TCHAR *string = (TCHAR *) buffer->Get();
+		string[len] = 0;
+		return string;
+	}
+
+	int Wnd::GetFontHeightForWindow(HFONT hFont)
+	{
+		TEXTMETRIC tm;
+		HDC hdc = GetDC();
+		HFONT hOldFont = (HFONT) SelectObject(hdc, hFont);
+		GetTextMetrics(hdc, &tm);
+		SelectObject(hdc, hOldFont);
+		ReleaseDC(hdc);
+
+		return tm.tmHeight;
+	}
+
+	LPCTSTR Wnd::GetDlgItemText(int id, ByteArray *buffer)
+	{
+		buffer->Resize(128);
+		for (;;) {
+			DWORD dwCapacity = buffer->GetSize() / sizeof(TCHAR);
+			UINT uGot = GetDlgItemText(id, (TCHAR *) buffer->Get(), dwCapacity);
+
+			if (uGot < dwCapacity - 1)
+			{
+				((TCHAR *) buffer->Get())[uGot] = 0;
+				return (const TCHAR *) buffer->Get();
+			}
+
+			buffer->Resize(buffer->GetSize() * 2);
+		}
+	}
+
 	//
 	// Dlg
 	//
 
 	Dlg::Dlg() :
-		_resourceinst(GetInstanceHandle()),
+		_resourceinst(GetHInstance()),
 		_resourcename(0)
 	{
 	}
 
 	Dlg::Dlg(HWND attach, bool subclass) :
-		_resourceinst(GetInstanceHandle()),
+		_resourceinst(GetHInstance()),
 		_resourcename(0)
 	{
 		Attach(attach, subclass);
@@ -938,28 +964,25 @@ namespace WndLib
 		SetResource(inst, resourceid);
 	}
 
-	// Create the dialogue (modeless)
 	bool Dlg::Create(HWND parent)
 	{
 		INT_PTR result;
 		return DoDlg(parent, 0, 0, false, &result);
 	}
 
-	// Create the dialogue (modeless)
 	bool Dlg::CreateSetFont(HWND parent, LPCTSTR fontName, unsigned fontPointSize)
 	{
 		INT_PTR result;
 		return DoDlg(parent, fontName, fontPointSize, false, &result);
 	}
 
-	// Run the dialogue modally
 	INT_PTR Dlg::DoModal(HWND parent)
 	{
 		INT_PTR result;
 		if (! DoDlg(parent, 0, 0, true, &result))
 			return IDCANCEL;
 
-		_hwnd = NULL;
+		SetHWnd(NULL);
 
 		return result;
 	}
@@ -970,12 +993,11 @@ namespace WndLib
 		if (! DoDlg(parent, fontName, fontPointSize, true, &result))
 			return IDCANCEL;
 
-		_hwnd = NULL;
+		SetHWnd(NULL);
 
 		return result;
 	}
 
-	// Create/DoModal the dialogue, force the font if fontPointSize != 0
 	bool Dlg::DoDlg(HWND parent, LPCTSTR fontName, unsigned fontPointSize, bool modal, INT_PTR *result_out)
 	{
 		if (fontPointSize)
@@ -1234,7 +1256,6 @@ namespace WndLib
 		}
 	}
 
-	// Our class's dialogue procedure
 	LRESULT WINAPI Dlg::StaticDlgProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 	{
 		Dlg *wnd;
@@ -1251,23 +1272,23 @@ namespace WndLib
 
 			Map(hwnd, wnd);
 
-			wnd->_hwnd = hwnd;
+			wnd->SetHWnd(hwnd);
 			HelpSetWindowPtr(hwnd, DWLP_USER, (const void *) wnd);
 		}
-
-		if (msg == WM_DESTROY)
-			Unmap(hwnd);
 
 		wnd = (Dlg *) HelpGetWindowPtr(hwnd, DWLP_USER);
 		if (! wnd)
 			return FALSE;
 
+		if (msg == WM_DESTROY)
+			Unmap(wnd);
+
 		LRESULT result = wnd->WndProc(msg, wparam, lparam);
 
 		if (msg == WM_NCDESTROY)
 		{
-			wnd->_hwnd = NULL;
-			Unmap(hwnd);
+			wnd->SetHWnd(NULL);
+			Unmap(wnd);
 
 			if (wnd->GetSelfDestruct())
 			{
@@ -1278,7 +1299,6 @@ namespace WndLib
 		return result;
 	}
 
-	// Do NOT call Wnd::WndProc
 	LRESULT Dlg::WndProc(UINT msg, WPARAM wparam, LPARAM)
 	{
 		switch (msg)
@@ -1323,8 +1343,6 @@ namespace WndLib
 		EndDialog(IDCANCEL);
 	}
 
-	// End this dialogue with the specified result. This can be used by
-	// modeless dialogues to.
 	bool Dlg::EndDialog(int result)
 	{
 		if (_modeless)
@@ -1335,7 +1353,7 @@ namespace WndLib
 			return true;
 		}
 		else
-			return ::EndDialog(_hwnd, result) != FALSE;
+			return ::EndDialog(GetHWnd(), result) != FALSE;
 	}
 
 	//
@@ -1348,10 +1366,8 @@ namespace WndLib
 
 	StaticWnd::~StaticWnd()
 	{
-		DestroyOrDetach();
 	}
 
-	// Get our class name
 	LPCTSTR StaticWnd::GetClassName()
 	{
 		return TEXT("STATIC");
@@ -1367,10 +1383,8 @@ namespace WndLib
 
 	ButtonWnd::~ButtonWnd()
 	{
-		DestroyOrDetach();
 	}
 
-	// Get our class name
 	LPCTSTR ButtonWnd::GetClassName()
 	{
 		return TEXT("BUTTON");
@@ -1386,10 +1400,8 @@ namespace WndLib
 
 	EditWnd::~EditWnd()
 	{
-		DestroyOrDetach();
 	}
 
-	// Get our class name
 	LPCTSTR EditWnd::GetClassName()
 	{
 		return TEXT("EDIT");
@@ -1404,13 +1416,11 @@ namespace WndLib
 		ScrollCaret();
 	}
 
-	// Return the line number (zero based)
 	int EditWnd::GetLineNumber()
 	{
 		return LineFromChar(-1);
 	}
 
-	// Return the column number (zero based) (requires tab size)
 	int EditWnd::GetColumnNumber(int tab)
 	{
 		INT line = LineFromChar(-1);
@@ -1479,7 +1489,6 @@ namespace WndLib
 		return colnum;
 	}
 
-	// Return the character number (zero based)
 	int EditWnd::GetCharNumber()
 	{
 		INT line = LineFromChar(-1);
@@ -1500,10 +1509,8 @@ namespace WndLib
 
 	ListBoxWnd::~ListBoxWnd()
 	{
-		DestroyOrDetach();
 	}
 
-	// Get our class name
 	LPCTSTR ListBoxWnd::GetClassName()
 	{
 		return TEXT("LISTBOX");
@@ -1519,10 +1526,8 @@ namespace WndLib
 
 	ComboBoxWnd::~ComboBoxWnd()
 	{
-		DestroyOrDetach();
 	}
 
-	// Get our class name
 	LPCTSTR ComboBoxWnd::GetClassName()
 	{
 		return TEXT("COMBOBOX");
@@ -1539,7 +1544,7 @@ namespace WndLib
 
 	LRESULT MDIFrameWnd::WndProc(UINT msg, WPARAM wparam, LPARAM lparam)
 	{
-		return ::DefFrameProc(_hwnd, _mdiClient, msg, wparam, lparam);
+		return ::DefFrameProc(GetHWnd(), _mdiClient, msg, wparam, lparam);
 	}
 
 	//
@@ -1554,7 +1559,6 @@ namespace WndLib
 
 	MDIClientWnd::~MDIClientWnd()
 	{
-		DestroyOrDetach();
 	}
 
 	LPCTSTR MDIClientWnd::GetClassName()
@@ -1594,10 +1598,8 @@ namespace WndLib
 
 	RichEditWnd::~RichEditWnd()
 	{
-		DestroyOrDetach();
 	}
 
-	// Wnd overrides.
 	LPCTSTR RichEditWnd::GetClassName()
 	{
 		return TEXT("RichEdit");
@@ -1617,10 +1619,8 @@ namespace WndLib
 
 	RichEdit2Wnd::~RichEdit2Wnd()
 	{
-		DestroyOrDetach();
 	}
 
-	// Wnd overrides.
 	LPCTSTR RichEdit2Wnd::GetClassName()
 	{
 		return RICHEDIT_CLASS;
@@ -1636,10 +1636,8 @@ namespace WndLib
 
 	ComboBoxExWnd::~ComboBoxExWnd()
 	{
-		DestroyOrDetach();
 	}
 
-	// Get our class name
 	LPCTSTR ComboBoxExWnd::GetClassName()
 	{
 		return WC_COMBOBOXEX;
@@ -1655,10 +1653,8 @@ namespace WndLib
 
 	DateTimePickerWnd::~DateTimePickerWnd()
 	{
-		DestroyOrDetach();
 	}
 
-	// Get our class name
 	LPCTSTR DateTimePickerWnd::GetClassName()
 	{
 		return DATETIMEPICK_CLASS;
@@ -1674,10 +1670,8 @@ namespace WndLib
 
 	HotKeyWnd::~HotKeyWnd()
 	{
-		DestroyOrDetach();
 	}
 
-	// Get our class name
 	LPCTSTR HotKeyWnd::GetClassName()
 	{
 		return HOTKEY_CLASS;
@@ -1695,10 +1689,8 @@ namespace WndLib
 
 	IPAddressWnd::~IPAddressWnd()
 	{
-		DestroyOrDetach();
 	}
 
-	// Get our class name
 	LPCTSTR IPAddressWnd::GetClassName()
 	{
 		return WC_IPADDRESS;
@@ -1716,16 +1708,13 @@ namespace WndLib
 
 	ListViewWnd::~ListViewWnd()
 	{
-		DestroyOrDetach();
 	}
 
-	// Get our class name
 	LPCTSTR ListViewWnd::GetClassName()
 	{
 		return WC_LISTVIEW;
 	}
 
-	// Get the single selected item in the list, return -1 otherwise
 	int ListViewWnd::GetSingleSelection()
 	{
 		UINT nselected = this->GetSelectedCount();
@@ -1749,7 +1738,6 @@ namespace WndLib
 		return -1;
 	}
 
-	// Select the i'th entry in the list (this is a WndLib extension)
 	void ListViewWnd::SetSelection(int select)
 	{
 		int n = this->GetItemCount();
@@ -1783,7 +1771,6 @@ namespace WndLib
 		this->SetFocus();
 	}
 
-	// Add a column, return it's index
 	int ListViewWnd::AddColumn(LPCTSTR text, int width)
 	{
 		int colnum = 0;
@@ -1808,7 +1795,6 @@ namespace WndLib
 		return colnum;
 	}
 
-	// Insert an item in the list simply by providing text for each entry.
 	void ListViewWnd::InsertItem(int item, int numColumns, LPCTSTR *columns, int image)
 	{
 		WNDLIB_ASSERT(0 != columns);
@@ -1845,10 +1831,8 @@ namespace WndLib
 
 	ProgressBarWnd::~ProgressBarWnd()
 	{
-		DestroyOrDetach();
 	}
 
-	// Wnd overrides.
 	LPCTSTR ProgressBarWnd::GetClassName()
 	{
 		return PROGRESS_CLASS;
@@ -1867,21 +1851,18 @@ namespace WndLib
 
 	PropertySheetWnd::~PropertySheetWnd()
 	{
-		DestroyOrDetach();
 	}
 
-	// Create the PropertySheetWnd using the default options for the class
 	bool PropertySheetWnd::Create(HWND parent, int x, int y, int width, int height, int dlgid)
 	{
-		#pragma warning(disable: 4312) // stupid bloody warning
+		#pragma warning(disable: 4312)
 		return TabControlWnd::CreateEx(WS_EX_CONTROLPARENT, NULL, WS_CHILD | WS_VISIBLE
 				| WS_CLIPSIBLINGS | WS_CLIPCHILDREN | TCS_FOCUSONBUTTONDOWN
 				| TCS_MULTILINE | TCS_TABS | WS_TABSTOP, x, y, width, height, parent,
-				(HMENU) dlgid, GetInstanceHandle(), NULL, false);
-		#pragma warning(default: 4312) // stupid bloody warning
+				(HMENU) dlgid, GetHInstance(), NULL, false);
+		#pragma warning(default: 4312)
 	}
 
-	// Add a new tab, returns it's index
 	int PropertySheetWnd::AddTab(LPCTSTR tabtext)
 	{
 		int index = GetItemCount();
@@ -1907,10 +1888,8 @@ namespace WndLib
 
 	RebarWnd::~RebarWnd()
 	{
-		DestroyOrDetach();
 	}
 
-	// Get our class name
 	LPCTSTR RebarWnd::GetClassName()
 	{
 		return REBARCLASSNAME;
@@ -1939,7 +1918,6 @@ namespace WndLib
 		return SetBarInfo(&rbi);
 	}
 
-	// Maximize the last bar on each row
 	void RebarWnd::Rearrange()
 	{
 		UINT n = GetBandCount();
@@ -1960,7 +1938,7 @@ namespace WndLib
 	int RebarWnd::InsertBar(ToolbarWnd *bar, LPCTSTR title, UINT flags)
 	{
 		WNDLIB_ASSERT(0 != bar);
-		WNDLIB_ASSERT(bar->HWnd());
+		WNDLIB_ASSERT(bar->GetHWnd());
 
 		REBARBANDINFO band;
 		memset(&band, 0, sizeof(band));
@@ -1996,7 +1974,7 @@ namespace WndLib
 			band.fStyle |= RBBS_NOGRIPPER;
 		}
 		band.lpText = (LPTSTR) title;
-		band.hwndChild = bar->HWnd();
+		band.hwndChild = bar->GetHWnd();
 		band.cyMinChild = band.cyChild = band.cyMaxChild = buttonsize.cy;
 		band.cx = rect.right + 16;
 		band.cxMinChild = rect.right; //0 // chevron;
@@ -2036,22 +2014,18 @@ namespace WndLib
 
 	StatusBarWnd::~StatusBarWnd()
 	{
-		DestroyOrDetach();
-
 		if (_prevText)
 			delete[] _prevText;
 	}
 
-	// Get our class name
 	LPCTSTR StatusBarWnd::GetClassName()
 	{
 		return STATUSCLASSNAME;
 	}
 
-	// Process WM_MENUSELECT for the parent window
 	void StatusBarWnd::OnMenuSelect(WPARAM wparam, LPARAM lparam)
 	{
-		TCHAR buf[512];
+		TCHAR buffer[512];
 
 		UINT item = (UINT) LOWORD(wparam);
 		UINT flags = (UINT) HIWORD(wparam);
@@ -2060,12 +2034,12 @@ namespace WndLib
 		if (! _menuSelecting)
 		{
 			_menuSelecting = true;
-			GetText(0, buf);
+			GetText(0, buffer);
 
 			if (_prevText)
 				delete[] _prevText;
 
-			_prevText = NewTStr(buf);
+			_prevText = TNewString(buffer);
 		}
 
 		if (flags == 0xffff && ! menu)
@@ -2081,11 +2055,11 @@ namespace WndLib
 
 			TCHAR *ptr;
 
-			if ((flags & MF_POPUP) || (flags & MF_SEPARATOR) || ! ::LoadString(GetInstanceHandle(), item, buf, WNDLIB_COUNTOF(buf)))
+			if ((flags & MF_POPUP) || (flags & MF_SEPARATOR) || ! ::LoadString(GetHInstance(), item, buffer, WNDLIB_COUNTOF(buffer)))
 				ptr = TEXT("");
 			else
 			{
-				ptr = buf;
+				ptr = buffer;
 				TCHAR *ptr2 = ptr;
 
 				while (*ptr2 && *ptr2 != '\n')
@@ -2108,10 +2082,8 @@ namespace WndLib
 
 	TabControlWnd::~TabControlWnd()
 	{
-		DestroyOrDetach();
 	}
 
-	// Get our class name
 	LPCTSTR TabControlWnd::GetClassName()
 	{
 		return WC_TABCONTROL;
@@ -2127,10 +2099,8 @@ namespace WndLib
 
 	ToolbarWnd::~ToolbarWnd()
 	{
-		DestroyOrDetach();
 	}
 
-	// Get our class name
 	LPCTSTR ToolbarWnd::GetClassName()
 	{
 		return TOOLBARCLASSNAME;
@@ -2202,7 +2172,6 @@ namespace WndLib
 
 	ToolTipWnd::~ToolTipWnd()
 	{
-		DestroyOrDetach();
 	}
 
 	LPCTSTR ToolTipWnd::GetClassName()
@@ -2220,10 +2189,8 @@ namespace WndLib
 
 	TrackBarWnd::~TrackBarWnd()
 	{
-		DestroyOrDetach();
 	}
 
-	// Get our class name
 	LPCTSTR TrackBarWnd::GetClassName()
 	{
 		return TRACKBAR_CLASS;
@@ -2239,10 +2206,8 @@ namespace WndLib
 
 	TreeViewWnd::~TreeViewWnd()
 	{
-		DestroyOrDetach();
 	}
 
-	// Get our class name
 	LPCTSTR TreeViewWnd::GetClassName()
 	{
 		return WC_TREEVIEW;
@@ -2275,7 +2240,6 @@ namespace WndLib
 		return NULL;
 	}
 
-	// Get the single selected item in the tree, return NULL otherwise
 	HTREEITEM TreeViewWnd::GetSingleSelection()
 	{
 		HTREEITEM item = GetNextItem(TVGN_ROOT, NULL);
@@ -2312,10 +2276,8 @@ namespace WndLib
 
 	UpDownWnd::~UpDownWnd()
 	{
-		DestroyOrDetach();
 	}
 
-	// Get our class name
 	LPCTSTR UpDownWnd::GetClassName()
 	{
 		return UPDOWN_CLASS;
@@ -2337,13 +2299,13 @@ namespace WndLib
 
 	bool ModuleIcons::LoadExeIcons()
 	{
-		TCHAR buf[2048];
+		TCHAR buffer[2048];
 
-		DWORD result = GetModuleFileName(GetModuleHandle(NULL), buf, WNDLIB_COUNTOF(buf));
-		if (! result || result >= WNDLIB_COUNTOF(buf))
+		DWORD result = GetModuleFileName(GetModuleHandle(NULL), buffer, WNDLIB_COUNTOF(buffer));
+		if (! result || result >= WNDLIB_COUNTOF(buffer))
 			return false;
 
-		return LoadIcons(buf);
+		return LoadIcons(buffer);
 	}
 
 	bool ModuleIcons::LoadIcons(const TCHAR *modulePath)

@@ -23,7 +23,8 @@ namespace WndLib
 		ByteArray verinfobuf;
 		verinfobuf.Resize(verinfosize);
 
-		if (! GetFileVersionInfo(filename, zerohandle, verinfosize, verinfobuf.Get()))
+		// Cast away constness for Win98
+		if (! GetFileVersionInfo((TCHAR *) filename, zerohandle, verinfosize, verinfobuf.Get()))
 			return false;
 
 		void *block = verinfobuf.Get();
@@ -58,21 +59,21 @@ namespace WndLib
 					LangCodePage lcp = *(const LangCodePage *) data;
 
 					// Extract product name
-					SNTPrintf(strbuf, WNDLIB_COUNTOF(strbuf),
+					Tsnprintf(strbuf, WNDLIB_COUNTOF(strbuf),
 						TEXT("\\StringFileInfo\\%04x%04x\\FileDescription"),
 						lcp.language, lcp.codepage);
 					if (VerQueryValue(block, strbuf, &data, &datalen))
 						lstrcpy(_title, (LPCTSTR) data);
 
 					// Extract copyright notice
-					SNTPrintf(strbuf, WNDLIB_COUNTOF(strbuf),
+					Tsnprintf(strbuf, WNDLIB_COUNTOF(strbuf),
 						TEXT("\\StringFileInfo\\%04x%04x\\LegalCopyright"),
 						lcp.language, lcp.codepage);
 					if (VerQueryValue(block, strbuf, &data, &datalen))
 						lstrcpy(_copyright, (LPCTSTR) data);
 
 					// Extract comments
-					SNTPrintf(strbuf, WNDLIB_COUNTOF(strbuf),
+					Tsnprintf(strbuf, WNDLIB_COUNTOF(strbuf),
 						TEXT("\\StringFileInfo\\%04x%04x\\Comments"),
 						lcp.language, lcp.codepage);
 					if (VerQueryValue(block, strbuf, &data, &datalen))

@@ -52,19 +52,19 @@
 	// If not overriden elsehwere, require Windows 2000, XP or newer NT based system.
 
 	#ifndef WINVER
-		#define WINVER 0x0500
+		#define WINVER 0x0400
 	#endif
 
 	#ifndef _WIN32_WINDOWS
-		#define _WIN32_WINDOWS 0x0410
+		#define _WIN32_WINDOWS 0x0400
 	#endif
 
 	#ifndef _WIN32_WINNT
-		#define _WIN32_WINNT 0x0500
+		#define _WIN32_WINNT 0x0400
 	#endif
 
 	#ifndef _WIN32_IE
-		#define _WIN32_IE 0x0500
+		#define _WIN32_IE 0x0400
 	#endif
 
 	#ifndef WIN32_LEAN_AND_MEAN
@@ -109,20 +109,20 @@ namespace WndLib
 
 	namespace Private
 	{
-		WNDLIB_EXPORT extern HINSTANCE wndHInstance;
+		WNDLIB_EXPORT extern HINSTANCE hInstance;
 	}
 
 	// Return the application's instance handle.
-	inline HINSTANCE GetInstanceHandle()
+	inline HINSTANCE GetHInstance()
 	{
-		return Private::wndHInstance;
+		return Private::hInstance;
 	}
 
 	// Set the application's instance handle. You must call this before any
 	// Wnd instances are created.
-	inline void SetInstanceHandle(HINSTANCE instance)
+	inline void SetHInstance(HINSTANCE instance)
 	{
-		Private::wndHInstance = instance;
+		Private::hInstance = instance;
 	}
 
 	//
@@ -196,11 +196,17 @@ namespace WndLib
 	}
 
 	// Allocate a copy of str using operator new[].
-	WNDLIB_EXPORT TCHAR *NewTStr(LPCTSTR str);
+	WNDLIB_EXPORT TCHAR *TNewString(LPCTSTR str);
 
-	WNDLIB_EXPORT void VSNTPrintf(TCHAR *buf, size_t bufSize, const TCHAR *fmt, va_list argptr);
+	WNDLIB_EXPORT void Tvsnprintf(TCHAR *buffer, size_t bufferSize, const TCHAR *fmt, va_list argptr);
 
-	WNDLIB_EXPORT void SNTPrintf(TCHAR *buf, size_t bufSize, const TCHAR *fmt, ...);
+	WNDLIB_EXPORT void Tsnprintf(TCHAR *buffer, size_t bufferSize, const TCHAR *fmt, ...);
+
+	WNDLIB_EXPORT bool Tstrcpy(TCHAR *buffer, size_t bufferSize, const TCHAR *source);
+	WNDLIB_EXPORT bool Tstrcat(TCHAR *buffer, size_t bufferSize, const TCHAR *source);
+
+	// Returns the DPI scale factor for the system. Does not support per-monitor DPI.
+	WNDLIB_EXPORT double GetDPIScale(HDC hdc = NULL);
 
 	//
 	// EasyCreateFont
@@ -336,7 +342,7 @@ namespace WndLib
 			};
 
 			ScopedLock() :
-				lockable(0)
+				lockable(NULL)
 			{}
 
 			// Immediately lock the specified object.
@@ -411,7 +417,7 @@ namespace WndLib
 			{
 				WNDLIB_ASSERT(lockable);
 				lockable->Unlock();
-				lockable = 0;
+				lockable = NULL;
 			}
 
 		private:
@@ -559,8 +565,8 @@ namespace WndLib
 		virtual ~Wnd();
 
 		// Set the self destruct flag; if set then this object will delete itself
-		// when it receives a WM_NCDESTROY
-		void SetSelfDestruct(bool value)
+		// when it receives a WM_NCDESTROY. By default, this is false.
+		void SetSelfDestruct(bool value = true)
 		{
 			_selfDestruct = value;
 		}
@@ -569,30 +575,6 @@ namespace WndLib
 		bool GetSelfDestruct() const
 		{
 			return _selfDestruct;
-		}
-
-		// Ask the Wnd to destroy itself
-		virtual void SelfDestruct();
-
-		// Get the auto destroy flag
-		bool GetAutoDestroy() const
-		{
-			return _autoDestroy;
-		}
-
-		// Set the auto destroy flag
-		void SetAutoDestroy(bool value)
-		{
-			_autoDestroy = value;
-		}
-
-		// Destroy or detach the window (based on the auto destroy flag)
-		void DestroyOrDetach()
-		{
-			if (GetAutoDestroy())
-				DestroyWindow();
-			else
-				Detach();
 		}
 
 		// Attach the specified HWND to this object, optionally subclassing it.
@@ -619,11 +601,7 @@ namespace WndLib
 		// Get our window handle
 		HWND GetHWnd() const
 		{
-			return _hwnd;
-		}
-		HWND HWnd() const
-		{
-			return _hwnd;
+			return _hwndx;
 		}
 
 		// In this library, unlike MFC, a Wnd is designed to correspond to a
@@ -644,8 +622,9 @@ namespace WndLib
 		// Create a window. Called CreateEx, rather than Create, to allow
 		// derived class to have their own specialised Create.
 		bool CreateEx(DWORD exStyle, LPCTSTR windowName, DWORD style,
-			int x, int y, int width, int height, HWND parent, HMENU menu,
-			HINSTANCE instance, LPVOID params, bool subclass);
+			int x, int y, int width, int height, HWND parent, HMENU menu = NULL,
+			HINSTANCE instance = GetHInstance(), LPVOID params = NULL, 
+			bool subclass = false);
 
 		// Our window procedure.
 		virtual LRESULT WndProc(UINT msg, WPARAM wparam, LPARAM lparam);
@@ -653,311 +632,290 @@ namespace WndLib
 		// Set the size of this window's client area
 		void SetClientAreaSize(int cx, int cy);
 
-	protected:
-
-		HWND DoCreateWindowEx(DWORD exStyle, LPCTSTR className, LPCTSTR windowName,
-			DWORD style, int x, int y, int cx, int cy, HWND parent, HMENU menu,
-			HINSTANCE instance, LPVOID lparam);
-
-		HWND _hwnd;
-
-	private:
-
-		void Construct();
-
-		WNDPROC _prevproc;
-
-		// If this flag is true, the object will be deleted when it receives a
-		// WM_NCDESTROY
-		bool _selfDestruct;
-
-		// If this flag is true the window will be destroyed when the destructor
-		// is called
-		bool _autoDestroy;
-
-		// Window procedure handler to call if a message is not handled
-		WNDPROC _defWindowProc;
-
 		//
 		// API wrappers
 		//
 
-	public:
-
 		LRESULT SendMessage(UINT msg, WPARAM wparam = 0, LPARAM lparam = 0)
 		{
-			return ::SendMessage(_hwnd, msg, wparam, lparam);
+			return ::SendMessage(GetHWnd(), msg, wparam, lparam);
 		}
 		BOOL PostMessage(UINT msg, WPARAM wparam = 0, LPARAM lparam = 0)
 		{
-			return ::PostMessage(_hwnd, msg, wparam, lparam);
+			return ::PostMessage(GetHWnd(), msg, wparam, lparam);
 		}
 
 		LONG GetWindowLong(int index)
 		{
-			return ::GetWindowLong(_hwnd, index);
+			return ::GetWindowLong(GetHWnd(), index);
 		}
 		LONG GetClassLong(int index)
 		{
-			return ::GetClassLong(_hwnd, index);
+			return ::GetClassLong(GetHWnd(), index);
 		}
 		LONG SetWindowLong(int index, LONG value)
 		{
-			return ::SetWindowLong(_hwnd, index, value);
+			return ::SetWindowLong(GetHWnd(), index, value);
 		}
 		LONG SetClassLong(int index, LONG value)
 		{
-			return ::SetClassLong(_hwnd, index, value);
+			return ::SetClassLong(GetHWnd(), index, value);
 		}
 
-		/*LONG_PTR GetWindowLongPtr(int index) { return ::GetWindowLongPtr(_hwnd, index); }
-		LONG_PTR GetClassLongPtr(int index) { return ::GetClassLongPtr(_hwnd, index); }
-		LONG_PTR SetWindowLongPtr(int index, LONG_PTR value) { return ::SetWindowLongPtr(_hwnd, index, value); }
-		LONG_PTR SetClassLongPtr(int index, LONG_PTR value) { return ::SetClassLongPtr(_hwnd, index, value); }*/
+		/*LONG_PTR GetWindowLongPtr(int index) { return ::GetWindowLongPtr(GetHWnd(), index); }
+		LONG_PTR GetClassLongPtr(int index) { return ::GetClassLongPtr(GetHWnd(), index); }
+		LONG_PTR SetWindowLongPtr(int index, LONG_PTR value) { return ::SetWindowLongPtr(GetHWnd(), index, value); }
+		LONG_PTR SetClassLongPtr(int index, LONG_PTR value) { return ::SetClassLongPtr(GetHWnd(), index, value); }*/
 
 		BOOL ShowWindow(int showCommand)
 		{
-			return ::ShowWindow(_hwnd, showCommand);
+			return ::ShowWindow(GetHWnd(), showCommand);
 		}
 		BOOL IsWindowVisible()
 		{
-			return ::IsWindowVisible(_hwnd);
+			return ::IsWindowVisible(GetHWnd());
 		}
 
 		BOOL EnableWindow(BOOL enable)
 		{
-			return ::EnableWindow(_hwnd, enable);
+			return ::EnableWindow(GetHWnd(), enable);
 		}
 		BOOL IsWindowEnabled()
 		{
-			return ::IsWindowEnabled(_hwnd);
+			return ::IsWindowEnabled(GetHWnd());
 		}
 
 		BOOL SetWindowPos(HWND insertAfter, int x, int y, int width, int height, UINT flags)
 		{
-			return ::SetWindowPos(_hwnd, insertAfter, x, y, width, height, flags);
+			return ::SetWindowPos(GetHWnd(), insertAfter, x, y, width, height, flags);
 		}
-		BOOL MoveWindow(int x, int y, int width, int height, BOOL repaint)
+		BOOL MoveWindow(int x, int y, int width, int height, BOOL repaint = TRUE)
 		{
-			return ::MoveWindow(_hwnd, x, y, width, height, repaint);
+			return ::MoveWindow(GetHWnd(), x, y, width, height, repaint);
 		}
 
 		BOOL SetWindowPlacement(const WINDOWPLACEMENT *placement)
 		{
-			return ::SetWindowPlacement(_hwnd, placement);
+			return ::SetWindowPlacement(GetHWnd(), placement);
 		}
 		BOOL GetWindowPlacement(WINDOWPLACEMENT *placement)
 		{
-			return ::GetWindowPlacement(_hwnd, placement);
+			return ::GetWindowPlacement(GetHWnd(), placement);
 		}
 
 		HDC BeginPaint(LPPAINTSTRUCT paint)
 		{
-			return ::BeginPaint(_hwnd, paint);
+			return ::BeginPaint(GetHWnd(), paint);
 		}
 		BOOL EndPaint(const PAINTSTRUCT *paint)
 		{
-			return ::EndPaint(_hwnd, paint);
+			return ::EndPaint(GetHWnd(), paint);
 		}
 
 		BOOL GetClientRect(LPRECT rect)
 		{
-			return ::GetClientRect(_hwnd, rect);
+			return ::GetClientRect(GetHWnd(), rect);
 		}
 		BOOL GetWindowRect(LPRECT rect)
 		{
-			return ::GetWindowRect(_hwnd, rect);
+			return ::GetWindowRect(GetHWnd(), rect);
 		}
 
 		HDC GetDC()
 		{
-			return ::GetDC(_hwnd);
+			return ::GetDC(GetHWnd());
 		}
 		BOOL ReleaseDC(HDC hdc)
 		{
-			return ::ReleaseDC(_hwnd, hdc);
+			return ::ReleaseDC(GetHWnd(), hdc);
 		}
 
 		BOOL ScreenToClient(LPPOINT pt)
 		{
-			return ::ScreenToClient(_hwnd, pt);
+			return ::ScreenToClient(GetHWnd(), pt);
 		}
 		BOOL ScreenToClient(LPRECT r)
 		{
-			return ::ScreenToClient(_hwnd, (LPPOINT)r) && ::ScreenToClient(_hwnd, ((LPPOINT)r) + 1);
+			return ::ScreenToClient(GetHWnd(), (LPPOINT)r) && ::ScreenToClient(GetHWnd(), ((LPPOINT)r) + 1);
 		}
 		BOOL ClientToScreen(LPPOINT pt)
 		{
-			return ::ClientToScreen(_hwnd, pt);
+			return ::ClientToScreen(GetHWnd(), pt);
 		}
 		BOOL ClientToScreen(LPRECT r)
 		{
-			return ::ClientToScreen(_hwnd, (LPPOINT)r) && ::ClientToScreen(_hwnd, ((LPPOINT)r) + 1);
+			return ::ClientToScreen(GetHWnd(), (LPPOINT)r) && ::ClientToScreen(GetHWnd(), ((LPPOINT)r) + 1);
 		}
 
 		BOOL SetWindowText(LPCTSTR string)
 		{
-			return ::SetWindowText(_hwnd, string);
+			return ::SetWindowText(GetHWnd(), string);
 		}
 		BOOL GetWindowText(LPTSTR string, int maxChars)
 		{
-			return ::GetWindowText(_hwnd, string, maxChars);
+			return ::GetWindowText(GetHWnd(), string, maxChars);
 		}
 		int GetWindowTextLength()
 		{
-			return (int) ::GetWindowTextLength(_hwnd);
+			return (int) ::GetWindowTextLength(GetHWnd());
 		}
+		LPCTSTR GetWindowText(ByteArray *buffer);
 
 		HWND GetParent()
 		{
-			return ::GetParent(_hwnd);
+			return ::GetParent(GetHWnd());
 		}
 		HWND SetParent(HWND newParent)
 		{
-			return ::SetParent(_hwnd, newParent);
+			return ::SetParent(GetHWnd(), newParent);
 		}
 		HWND GetWindow(UINT cmd)
 		{
-			return ::GetWindow(_hwnd, cmd);
+			return ::GetWindow(GetHWnd(), cmd);
 		}
 
 		BOOL InvalidateRect(CONST RECT *rect = NULL, BOOL erase = TRUE)
 		{
-			return ::InvalidateRect(_hwnd, rect, erase);
+			return ::InvalidateRect(GetHWnd(), rect, erase);
 		}
 		BOOL ValidateRect(CONST RECT *rect = NULL)
 		{
-			return ::ValidateRect(_hwnd, rect);
+			return ::ValidateRect(GetHWnd(), rect);
 		}
 		BOOL UpdateWindow()
 		{
-			return ::UpdateWindow(_hwnd);
+			return ::UpdateWindow(GetHWnd());
 		}
 
 		// Sort-of-wrappers
 		void CentreWindow(HWND parent)
 		{
-			WndLib::CentreWindow(parent, _hwnd);
+			WndLib::CentreWindow(parent, GetHWnd());
 		}
 		void ClampToDesktop()
 		{
-			WndLib::ClampToDesktop(_hwnd);
+			WndLib::ClampToDesktop(GetHWnd());
 		}
 
 		void SetDlgItemText(int id, LPCTSTR string)
 		{
-			::SetDlgItemText(_hwnd, id, string);
+			::SetDlgItemText(GetHWnd(), id, string);
 		}
 		void SetDlgItemInt(int id, UINT value, bool issigned = true)
 		{
-			::SetDlgItemInt(_hwnd, id, value, issigned ? TRUE : FALSE);
+			::SetDlgItemInt(GetHWnd(), id, value, issigned ? TRUE : FALSE);
 		}
 		int GetDlgItemText(int id, LPTSTR stringout, int maxcount)
 		{
-			return ::GetDlgItemText(_hwnd, id, stringout, maxcount);
+			return ::GetDlgItemText(GetHWnd(), id, stringout, maxcount);
 		}
+		LPCTSTR GetDlgItemText(int id, ByteArray *buffer);
+
 		UINT GetDlgItemInt(int id, BOOL *translated, bool issigned)
 		{
-			return ::GetDlgItemInt(_hwnd, id, translated, issigned ? TRUE : FALSE);
+			return ::GetDlgItemInt(GetHWnd(), id, translated, issigned ? TRUE : FALSE);
 		}
 
 		LRESULT SendDlgItemMessage(int id, UINT message, WPARAM wparam = 0, LPARAM lparam = 0)
 		{
-			return ::SendDlgItemMessage(_hwnd, id, message, wparam, lparam);
+			return ::SendDlgItemMessage(GetHWnd(), id, message, wparam, lparam);
 		}
 
 		HWND SetFocus()
 		{
-			return ::SetFocus(_hwnd);
+			return ::SetFocus(GetHWnd());
 		}
 		HWND SetCapture()
 		{
-			return ::SetCapture(_hwnd);
+			return ::SetCapture(GetHWnd());
 		}
 
 		int GetTextLength()
 		{
-			return (int) ::SendMessage(_hwnd, WM_GETTEXTLENGTH, 0, 0);
+			return (int) ::SendMessage(GetHWnd(), WM_GETTEXTLENGTH, 0, 0);
 		}
 
 		HWND SetActiveWindow()
 		{
-			return ::SetActiveWindow(_hwnd);
+			return ::SetActiveWindow(GetHWnd());
 		}
 		BOOL SetForegroundWindow()
 		{
-			return ::SetForegroundWindow(_hwnd);
+			return ::SetForegroundWindow(GetHWnd());
 		}
 
 		BOOL SetMenu(HMENU hmenu)
 		{
-			return ::SetMenu(_hwnd, hmenu);
+			return ::SetMenu(GetHWnd(), hmenu);
 		}
 		BOOL DrawMenuBar()
 		{
-			return ::DrawMenuBar(_hwnd);
+			return ::DrawMenuBar(GetHWnd());
 		}
 
 		BOOL IsIconic()
 		{
-			return ::IsIconic(_hwnd);
+			return ::IsIconic(GetHWnd());
 		}
 		BOOL IsZoomed()
 		{
-			return ::IsZoomed(_hwnd);
+			return ::IsZoomed(GetHWnd());
 		}
 
 		void SetFont(HFONT hfont, bool redraw = true)
 		{
-			::SendMessage(_hwnd, WM_SETFONT, (WPARAM) hfont, redraw ? TRUE : FALSE);
+			::SendMessage(GetHWnd(), WM_SETFONT, (WPARAM) hfont, redraw ? TRUE : FALSE);
+		}
+
+		HFONT GetFont()
+		{
+			return (HFONT) ::SendMessage(GetHWnd(), WM_GETFONT, 0, 0);
 		}
 
 		int GetDlgCtrlID()
 		{
-			return ::GetDlgCtrlID(_hwnd);
+			return ::GetDlgCtrlID(GetHWnd());
 		}
 		void SetDlgCtrlID(int id)
 		{
-			::SetWindowLong(_hwnd, GWL_ID, (LONG) id);
+			::SetWindowLong(GetHWnd(), GWL_ID, (LONG) id);
 		}
 
 		UINT_PTR SetTimer(UINT eventId, UINT elapse, TIMERPROC timerProc)
 		{
-			return ::SetTimer(_hwnd, eventId, elapse, timerProc);
+			return ::SetTimer(GetHWnd(), eventId, elapse, timerProc);
 		}
 		BOOL KillTimer(UINT eventId)
 		{
-			return ::KillTimer(_hwnd, eventId);
+			return ::KillTimer(GetHWnd(), eventId);
 		}
 
 		BOOL CheckDlgButton(int buttonId, BOOL check)
 		{
-			return ::CheckDlgButton(_hwnd, buttonId, check);
+			return ::CheckDlgButton(GetHWnd(), buttonId, check);
 		}
 		UINT IsDlgButtonChecked(int buttonId)
 		{
-			return ::IsDlgButtonChecked(_hwnd, buttonId);
+			return ::IsDlgButtonChecked(GetHWnd(), buttonId);
 		}
 		BOOL CheckRadioButton(int firstId, int lastId, int checkedId)
 		{
-			return ::CheckRadioButton(_hwnd, firstId, lastId, checkedId);
+			return ::CheckRadioButton(GetHWnd(), firstId, lastId, checkedId);
 		}
 
 		HWND GetDlgItem(int id)
 		{
-			return ::GetDlgItem(_hwnd, id);
+			return ::GetDlgItem(GetHWnd(), id);
 		}
 
 		//
 		// Helpers
 		//
 
-	public:
-
 		// Send a message to the descendants of a window
 		void SendMessageToDescendants(UINT msg, WPARAM wparam, LPARAM lparam, bool deep)
 		{
-			SendMessageToDescendants(HWnd(), msg, wparam, lparam, deep);
+			SendMessageToDescendants(GetHWnd(), msg, wparam, lparam, deep);
 		}
 
 		// Static version of the above
@@ -965,7 +923,7 @@ namespace WndLib
 
 		BOOL SetWindowPos(HWND insertAfter, const RECT &rc, UINT flags)
 		{
-			return ::SetWindowPos(_hwnd, insertAfter, rc.left, rc.top, rc.right-rc.left, rc.bottom-rc.top, flags);
+			return ::SetWindowPos(GetHWnd(), insertAfter, rc.left, rc.top, rc.right-rc.left, rc.bottom-rc.top, flags);
 		}
 
 		void GetSize(SIZE *sz);
@@ -977,21 +935,43 @@ namespace WndLib
 		bool GetDlgItemInt(int id, int *out);
 		bool GetDlgItemInt(int id, unsigned *out);
 
+		int GetFontHeightForWindow(HFONT hFont);
+
 		//
 		// Statics
 		//
 
-	public:
-
-		static bool Map(HWND hwnd, Wnd *wnd);
-		static bool Unmap(HWND hwnd);
-		static bool Unmap(Wnd *wnd);
 		static Wnd *FindWnd(HWND hwnd);
 
 		static LRESULT WINAPI StaticWndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam);
 		static LRESULT WINAPI SubclassWndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam);
 
+	protected:
+
+		static bool Map(HWND hwnd, Wnd *wnd);
+		static bool Unmap(Wnd *wnd);
+
+		HWND DoCreateWindowEx(DWORD exStyle, LPCTSTR className, LPCTSTR windowName,
+			DWORD style, int x, int y, int cx, int cy, HWND parent, HMENU menu,
+			HINSTANCE instance, LPVOID lparam);
+
+		// Ask the Wnd to destroy itself
+		virtual void SelfDestruct();
+
 	private:
+
+		void Construct();
+
+		WNDPROC _prevproc;
+
+		// If this flag is true, the object will be deleted when it receives a
+		// WM_NCDESTROY
+		bool _selfDestruct;
+
+		// Window procedure handler to call if a message is not handled
+		WNDPROC _defWindowProc;
+
+		HWND _hwndx;
 
 		struct WndMapping
 		{
@@ -1022,11 +1002,11 @@ namespace WndLib
 		// Set the dialgoue resource
 		void SetResource(UINT resourceid)
 		{
-			SetResource(GetInstanceHandle(), resourceid);
+			SetResource(GetHInstance(), resourceid);
 		}
 		void SetResource(LPCTSTR resourceid)
 		{
-			SetResource(GetInstanceHandle(), resourceid);
+			SetResource(GetHInstance(), resourceid);
 		}
 		void SetResource(HINSTANCE inst, UINT resourceid)
 		{
@@ -1620,9 +1600,9 @@ namespace WndLib
 		{
 			return (INT) SendMessage(CB_GETITEMHEIGHT, (WPARAM) of, 0);
 		}
-		INT GetLBText(INT index, LPTSTR buf)
+		INT GetLBText(INT index, LPTSTR buffer)
 		{
-			return (INT) SendMessage(CB_GETLBTEXT, (WPARAM) index, (LPARAM) buf);
+			return (INT) SendMessage(CB_GETLBTEXT, (WPARAM) index, (LPARAM) buffer);
 		}
 		INT GetLBTextLen(INT index)
 		{
@@ -1993,9 +1973,9 @@ namespace WndLib
 		{
 			return (DWORD) SendMessage(EM_GETSELTEXT, (WPARAM) 0, (LPARAM) text);
 		}
-		DWORD GetTextEx(GETTEXTEX *info, LPTSTR buf)
+		DWORD GetTextEx(GETTEXTEX *info, LPTSTR buffer)
 		{
-			return (DWORD) SendMessage(EM_GETTEXTEX, (WPARAM) info, (LPARAM) buf);
+			return (DWORD) SendMessage(EM_GETTEXTEX, (WPARAM) info, (LPARAM) buffer);
 		}
 		DWORD GettextLengthEx(GETTEXTLENGTHEX *tl)
 		{

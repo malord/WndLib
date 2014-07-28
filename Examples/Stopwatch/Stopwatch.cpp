@@ -125,7 +125,7 @@ bool StopwatchWnd::Create(HWND parent)
 	return CreateEx(0, TEXT("WndLib Stopwatch"),
 		WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN, 
 		40, 30, 400, 200, 
-		parent, NULL, GetInstanceHandle(), NULL, false);
+		parent, NULL, GetHInstance(), NULL, false);
 }
 
 LPCTSTR StopwatchWnd::GetClassName()
@@ -139,7 +139,7 @@ void StopwatchWnd::GetWndClass(WNDCLASSEX *wc)
 	Wnd::GetWndClass(wc);
 	
 	wc->hbrBackground = NULL;
-	wc->hIcon = wc->hIconSm = LoadIcon(GetInstanceHandle(), MAKEINTRESOURCE(IDI_APPICON));
+	wc->hIcon = wc->hIconSm = LoadIcon(GetHInstance(), MAKEINTRESOURCE(IDI_APPICON));
 }
 
 LRESULT StopwatchWnd::OnCreate(UINT msg, WPARAM wparam, LPARAM lparam)
@@ -156,7 +156,7 @@ LRESULT StopwatchWnd::OnCreate(UINT msg, WPARAM wparam, LPARAM lparam)
 	
 	if (! _startButton.CreateEx(0, TEXT("&Start"), 
 		WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | BS_PUSHBUTTON | WS_TABSTOP,
-		0, 0, 0, 0, HWnd(), NULL, NULL, NULL, false))
+		0, 0, 0, 0, GetHWnd(), NULL, NULL, NULL, false))
 	{
 		return -1;
 	}
@@ -166,7 +166,7 @@ LRESULT StopwatchWnd::OnCreate(UINT msg, WPARAM wparam, LPARAM lparam)
 
 	if (! _resetButton.CreateEx(0, TEXT("&Reset"), 
 		WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | BS_PUSHBUTTON | WS_TABSTOP,
-		0, 0, 0, 0, HWnd(), NULL, NULL, NULL, false))
+		0, 0, 0, 0, GetHWnd(), NULL, NULL, NULL, false))
 	{
 		return -1;
 	}
@@ -368,9 +368,9 @@ void StopwatchWnd::FormatTime(DWORD elapsedSeconds, TCHAR *buf, size_t bufSize)
 	int hh = (int) elapsedSeconds;
 	
 	if (! hh)
-		SNTPrintf(buf, bufSize, TEXT("%02d:%02d.%02d"), mm, ss, hs);
+		Tsnprintf(buf, bufSize, TEXT("%02d:%02d.%02d"), mm, ss, hs);
 	else
-		SNTPrintf(buf, bufSize, TEXT("%02d:%02d:%02d.%02d"), hh, mm, ss, hs);
+		Tsnprintf(buf, bufSize, TEXT("%02d:%02d:%02d.%02d"), hh, mm, ss, hs);
 }
 
 DWORD StopwatchWnd::GetElapsedSeconds() const
@@ -395,7 +395,7 @@ void StopwatchWnd::Draw(HDC hdc)
 	FormatTime(GetElapsedSeconds(), time, WNDLIB_COUNTOF(time));
 	
 	TCHAR buf[128];
-	SNTPrintf(buf, WNDLIB_COUNTOF(buf), TEXT("     %s     "), time); 
+	Tsnprintf(buf, WNDLIB_COUNTOF(buf), TEXT("     %s     "), time); 
 		
 	SetTextColor(hdc, RGB(100, 255, 0));
 	SetBkColor(hdc, RGB(0, 0, 0));
@@ -440,7 +440,7 @@ int WINAPI WinMain(HINSTANCE hinstance, HINSTANCE, LPSTR, int showCommand)
 	
 	timeBeginPeriod(1);
 	
-	SetInstanceHandle(hinstance);
+	SetHInstance(hinstance);
 	
 	StopwatchWnd myWnd;
 	
@@ -452,7 +452,7 @@ int WINAPI WinMain(HINSTANCE hinstance, HINSTANCE, LPSTR, int showCommand)
 	MSG msg;
 	while (GetMessage(&msg, NULL, 0, 0))
 	{
-		if (IsDialogMessage(myWnd.HWnd(), &msg))
+		if (IsDialogMessage(myWnd.GetHWnd(), &msg))
 			continue;
 			
 		TranslateMessage(&msg);

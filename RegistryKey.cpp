@@ -119,7 +119,7 @@ namespace WndLib
 		if (! QueryValue(value, typeout, alloced, sizeWithNull, &size))
 			return NULL;
 
-		((TCHAR *) alloced)[size] = 0;
+		((TCHAR *) alloced)[size / sizeof(TCHAR)] = 0;
 
 		return alloced;
 	}
@@ -183,7 +183,15 @@ namespace WndLib
 	bool RegistryKey::DeleteKey(LPCTSTR subkey)
 	{
 		WNDLIB_ASSERT(IsOpen());
-		return RegDeleteKey(_key, subkey) == ERROR_SUCCESS;
+		LONG result = RegDeleteKey(_key, subkey);
+		return result == ERROR_SUCCESS;
+	}
+
+	bool RegistryKey::DeleteValue(LPCTSTR subkey)
+	{
+		WNDLIB_ASSERT(IsOpen());
+		LONG result = RegDeleteValue(_key, subkey);
+		return result == ERROR_SUCCESS;
 	}
 
 	RegistryKey RegistryKey::CreateKey(LPCTSTR subkey)

@@ -9,6 +9,7 @@
 #define WNDLIB_LOGWND_H
 
 #include "WndLib.h"
+#include <stddef.h>
 
 namespace WndLib
 {

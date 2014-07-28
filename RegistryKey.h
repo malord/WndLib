@@ -86,6 +86,9 @@ namespace WndLib
 		// Delete a key. "subkey" cannot be null.
 		bool DeleteKey(LPCTSTR subkey);
 
+		// Delete a value. "subkey" cannot be null.
+		bool DeleteValue(LPCTSTR subkey);
+
 		// Create a key. "subkey" cannot be null.
 		RegistryKey CreateKey(LPCTSTR subkey);
 
@@ -104,7 +107,11 @@ namespace WndLib
 	private:
 
 		HKEY _key;
-		volatile LONG *_refcount;
+		#if WINVER < 0x0500
+			LONG *_refcount;
+		#else
+			volatile LONG *_refcount;
+		#endif
 	};
 }
 

@@ -47,7 +47,7 @@ namespace WndLib
 			40, 30,
 			GetSystemMetrics(SM_CXSCREEN) * 40 / 100,
 			GetSystemMetrics(SM_CYSCREEN) * 40 / 100,
-			parent, NULL, GetInstanceHandle(), NULL, false);
+			parent, NULL, GetHInstance(), NULL, false);
 	}
 
 	LPCTSTR LogWnd::GetClassName()
@@ -216,7 +216,7 @@ namespace WndLib
 		va_list argPtr;
 		va_start(argPtr, fmt);
 		TCHAR buffer[1024];
-		VSNTPrintf(buffer, WNDLIB_COUNTOF(buffer), fmt, argPtr);
+		Tvsnprintf(buffer, WNDLIB_COUNTOF(buffer), fmt, argPtr);
 		va_end(argPtr);
 
 		Log(buffer, colour, showCommand);
