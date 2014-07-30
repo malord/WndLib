@@ -910,6 +910,18 @@ namespace WndLib
 		return tm.tmHeight;
 	}
 
+	int Wnd::GetAverageCharWidthForWindow(HFONT hFont)
+	{
+		TEXTMETRIC tm;
+		HDC hdc = GetDC();
+		HFONT hOldFont = (HFONT) SelectObject(hdc, hFont);
+		GetTextMetrics(hdc, &tm);
+		SelectObject(hdc, hOldFont);
+		ReleaseDC(hdc);
+
+		return tm.tmAveCharWidth;
+	}
+
 	LPCTSTR Wnd::GetDlgItemText(int id, ByteArray *buffer)
 	{
 		buffer->Resize(128);

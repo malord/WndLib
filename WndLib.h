@@ -936,6 +936,7 @@ namespace WndLib
 		bool GetDlgItemInt(int id, unsigned *out);
 
 		int GetFontHeightForWindow(HFONT hFont);
+		int GetAverageCharWidthForWindow(HFONT hFont);
 
 		//
 		// Statics
@@ -1148,6 +1149,14 @@ namespace WndLib
 		void SetStyle(DWORD style)
 		{
 			SendMessage(BM_SETSTYLE, (WPARAM) style, 0);
+		}
+		BOOL IsChecked()
+		{
+			return GetCheck() == BST_CHECKED;
+		}
+		void SetChecked(BOOL value)
+		{
+			SetCheck(value ? BST_CHECKED : BST_UNCHECKED);
 		}
 	};
 

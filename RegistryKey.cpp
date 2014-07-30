@@ -124,6 +124,44 @@ namespace WndLib
 		return alloced;
 	}
 
+	DWORD RegistryKey::GetDWORD(LPCTSTR subkey, LPCTSTR value, DWORD errorValue) const
+	{
+		RegistryKey sub = Open(subkey);
+		if (! sub)
+			return false;
+
+		return sub.GetDWORD(value, errorValue);
+	}
+
+	DWORD RegistryKey::GetDWORD(LPCTSTR value, DWORD errorValue) const
+	{
+		ByteArray buffer;
+		DWORD type;
+		void *got = QueryValue(value, &type, &buffer);
+
+		if (! got)
+			return errorValue;
+
+		if (type != REG_DWORD)
+			return errorValue;
+
+		return *(LPDWORD) got;
+	}
+
+	bool RegistryKey::SetDWORD(LPCTSTR subkey, LPCTSTR value, DWORD number)
+	{
+		RegistryKey sub = Open(subkey);
+		if (! sub)
+			return false;
+
+		return sub.SetDWORD(value, number);
+	}
+
+	bool RegistryKey::SetDWORD(LPCTSTR value, DWORD number)
+	{
+		return SetValue(value, REG_DWORD, (const BYTE *) &number, sizeof(DWORD));
+	}
+
 	LPCTSTR RegistryKey::GetString(LPCTSTR subkey, LPCTSTR value, ByteArray *buffer) const
 	{
 		RegistryKey sub = Open(subkey);

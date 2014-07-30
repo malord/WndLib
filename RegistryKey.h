@@ -83,6 +83,18 @@ namespace WndLib
 		// Set a string as the value of this key.
 		bool SetString(LPCTSTR value, LPCTSTR string, DWORD type = REG_SZ);
 
+		// Read a REG_DWORD from the key.
+		DWORD GetDWORD(LPCTSTR subkey, LPCTSTR value, DWORD errorValue) const;
+
+		// Read a REG_DWORD from the key.
+		DWORD GetDWORD(LPCTSTR value, DWORD errorValue) const;
+
+		// Set a DWORD as the value of a key.
+		bool SetDWORD(LPCTSTR subkey, LPCTSTR value, DWORD number);
+
+		// Set a DWORD as the value of this key.
+		bool SetDWORD(LPCTSTR value, DWORD number);
+
 		// Delete a key. "subkey" cannot be null.
 		bool DeleteKey(LPCTSTR subkey);
 
