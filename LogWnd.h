@@ -1,6 +1,6 @@
 //
 // WndLib
-// Copyright (c) 1994-2013 Mark H. P. Lord. All rights reserved.
+// Copyright (c) 1994-2014 Mark H. P. Lord. All rights reserved.
 //
 // See LICENSE.txt for license.
 //
@@ -90,14 +90,14 @@ namespace WndLib
 
 		struct LogEntry
 		{
-			DataArray<TCHAR> text;
+			WinString text;
 			COLORREF colour;
 			ShowCommand showCommand;
 			LogEntry *next;
 		};
 
 		RichEdit2Wnd _edit;
-		HFONT _font;
+		Font _font;
 		CHARFORMAT _charFormat;
 
 		CriticalSection _cs;

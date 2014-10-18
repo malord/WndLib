@@ -21,11 +21,9 @@ using namespace WndLib;
 // StopwatchWnd
 //
 
-class StopwatchWnd : public Wnd
+class StopwatchWnd : public MainWnd
 {
-	WND_WM_DECLARE(StopwatchWnd, Wnd)
-	WND_WM_FUNC(OnClose)
-	WND_WM_FUNC(OnDestroy)
+	WND_WM_DECLARE(StopwatchWnd, MainWnd)
 	WND_WM_FUNC(OnEraseBkgnd)
 	WND_WM_FUNC(OnCreate)
 	WND_WM_FUNC(OnSize)
@@ -55,7 +53,7 @@ public:
 	DWORD GetElapsedSeconds() const;
 
 	//
-	// Wnd overrides
+	// MainWnd overrides
 	//
 	
 	virtual LPCTSTR GetClassName();
@@ -78,8 +76,8 @@ private:
 	bool _timerRunning;
 	DWORD _startTime;
 	DWORD _elapsed;
-	HFONT _font;
-	HFONT _bigFont;
+	Font _font;
+	Font _bigFont;
 	
 	#ifdef WNDLIB_LOGWND_H
 		LogWnd _logWnd;
@@ -90,9 +88,7 @@ private:
 // StopwatchWnd	
 //
 
-WND_WM_BEGIN(StopwatchWnd, Wnd)
-	WND_WM(WM_CLOSE, OnClose)
-	WND_WM(WM_DESTROY, OnDestroy)
+WND_WM_BEGIN(StopwatchWnd, MainWnd)
 	WND_WM(WM_ERASEBKGND, OnEraseBkgnd)
 	WND_WM(WM_CREATE, OnCreate)
 	WND_WM(WM_SIZE, OnSize)
@@ -108,16 +104,10 @@ StopwatchWnd::StopwatchWnd()
 {
 	_timerRunning = false;
 	_elapsed = 0;
-	_font = _bigFont = NULL;
 }
 
 StopwatchWnd::~StopwatchWnd()
 {
-	if (_font)	
-		DeleteObject(_font);
-		
-	if (_bigFont)
-		DeleteObject(_bigFont);
 }
 
 bool StopwatchWnd::Create(HWND parent)
@@ -135,8 +125,8 @@ LPCTSTR StopwatchWnd::GetClassName()
 
 void StopwatchWnd::GetWndClass(WNDCLASSEX *wc)
 {
-	// Wnd fills in most of this for us.
-	Wnd::GetWndClass(wc);
+	// MainWnd fills in most of this for us.
+	MainWnd::GetWndClass(wc);
 	
 	wc->hbrBackground = NULL;
 	wc->hIcon = wc->hIconSm = LoadIcon(GetHInstance(), MAKEINTRESOURCE(IDI_APPICON));
@@ -152,7 +142,7 @@ LRESULT StopwatchWnd::OnCreate(UINT msg, WPARAM wparam, LPARAM lparam)
 			RGB(0, 128, 255), LogWnd::SHOWCOMMAND_NO_CHANGE);
 	#endif
 		
-	_font = CreateShellFont();
+	_font.CreateShellFont();
 	
 	if (! _startButton.CreateEx(0, TEXT("&Start"), 
 		WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | BS_PUSHBUTTON | WS_TABSTOP,
@@ -218,24 +208,6 @@ LRESULT StopwatchWnd::OnSize(UINT msg, WPARAM wparam, LPARAM lparam)
 	_time.right = rect.right - gap;
 	_time.bottom = rect.bottom - gap;
 	
-	if (_bigFont)
-	{
-		DeleteObject(_bigFont);
-		_bigFont = NULL;
-	}
-	
-	return BaseWndProc(msg, wparam, lparam);
-}
-
-LRESULT StopwatchWnd::OnClose(UINT, WPARAM, LPARAM)
-{
-	DestroyWindow();
-	return 0;
-}
-
-LRESULT StopwatchWnd::OnDestroy(UINT msg, WPARAM wparam, LPARAM lparam)
-{
-	PostQuitMessage(0);
 	return BaseWndProc(msg, wparam, lparam);
 }
 
@@ -306,9 +278,9 @@ LRESULT StopwatchWnd::OnReset(UINT, WPARAM, LPARAM)
 
 LRESULT StopwatchWnd::OnTimer(UINT msg, WPARAM wparam, LPARAM lparam)
 {
-	HDC hdc = GetDC();
-	Draw(hdc);
-	ReleaseDC(hdc);
+	ClientDC dc(this);
+
+	Draw(dc);
 	
 	return BaseWndProc(msg, wparam, lparam);
 }
@@ -324,13 +296,9 @@ LRESULT StopwatchWnd::OnLButtonDown(UINT msg, WPARAM wparam, LPARAM lparam)
 
 LRESULT StopwatchWnd::OnPaint(UINT, WPARAM, LPARAM)
 {
-	PAINTSTRUCT ps;
-	if (BeginPaint(&ps))
-	{
-		Draw(ps.hdc);
-			
-		EndPaint(&ps);
-	}
+	PaintDC dc;
+	if (dc.BeginPaint(this))
+		Draw(dc);
 	
 	return 0;
 }
@@ -342,19 +310,16 @@ LRESULT StopwatchWnd::OnCtlColorBtn(UINT, WPARAM, LPARAM)
 
 void StopwatchWnd::CreateBigFont()
 {
-	if (_bigFont)
-		DeleteObject(_bigFont);
-		
 	// Use a hacky calculation to compute font size based on the window size.
 	LOGFONT lf;
-	GetObject(_font, sizeof(LOGFONT), &lf);
+	_font.GetLogFont(&lf);
 	lf.lfHeight = RectWidth(_time) * 4 / 19;
 	
 	int maxHeight = RectHeight(_time) * 7 / 8;
 	if (lf.lfHeight > maxHeight)
 		lf.lfHeight = maxHeight;
 	
-	_bigFont = CreateFontIndirect(&lf);
+	_bigFont.CreateFontIndirect(&lf);
 }
 
 void StopwatchWnd::FormatTime(DWORD elapsedSeconds, TCHAR *buf, size_t bufSize)
@@ -410,9 +375,8 @@ void StopwatchWnd::Draw(HDC hdc)
 
 void StopwatchWnd::Redraw()
 {
-	HDC hdc = GetDC();
-	Draw(hdc);
-	ReleaseDC(hdc);
+	ClientDC dc(this);
+	Draw(dc);
 }
 
 void StopwatchWnd::Log(const TCHAR *event)
@@ -452,7 +416,7 @@ int WINAPI WinMain(HINSTANCE hinstance, HINSTANCE, LPSTR, int showCommand)
 	MSG msg;
 	while (GetMessage(&msg, NULL, 0, 0))
 	{
-		if (IsDialogMessage(myWnd.GetHWnd(), &msg))
+		if (FilterMessage(&msg))
 			continue;
 			
 		TranslateMessage(&msg);

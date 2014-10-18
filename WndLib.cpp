@@ -132,6 +132,34 @@ namespace WndLib
 	// Utility functions
 	//
 
+	bool FilterMessage(MSG *msg)
+	{
+		Wnd *target = Wnd::FindWnd(msg->hwnd);
+		if (target && target->FilterMessage(msg))
+			return true;
+
+		HWND hwnd = msg->hwnd;
+		for (;;)
+		{
+			HWND parent = GetParent(hwnd);
+			if (! parent)
+				break;
+
+			hwnd = parent;
+
+			if (Wnd *found = Wnd::FindWnd(hwnd))
+			{
+				if (found->FilterMessage(msg))
+					return true;
+			}
+		}
+
+		if (target)
+			return target->PreTranslateMessage(msg);
+
+		return false;
+	}
+
 	void CentreWindow(HWND parent, HWND child)
 	{
 		RECT rparent;
@@ -350,61 +378,6 @@ namespace WndLib
 	}
 
 	//
-	// ByteArray
-	//
-
-	ByteArray::~ByteArray()
-	{
-		if (_bytes)
-			free(_bytes);
-	}
-
-	ByteArray::ByteArray(const void *bytes, size_t size)
-	{
-		_bytes = NULL;
-		Set(bytes, size);
-	}
-
-	ByteArray::ByteArray(const ByteArray &copy)
-	{
-		_bytes = NULL;
-		Set(copy._bytes, copy._size);
-	}
-
-	void ByteArray::Set(const void *bytes, size_t size)
-	{
-		if (_bytes)
-			free(_bytes);
-
-		_size = size;
-		if (! _size)
-			_bytes = NULL;
-		else
-		{
-			_bytes = (char *) malloc(_size);
-			if (_bytes)
-				memcpy(_bytes, bytes, _size);
-			else
-				_size = 0;
-		}
-	}
-
-	ByteArray &ByteArray::operator = (const ByteArray &copy)
-	{
-		if (this != &copy)
-			Set(copy._bytes, copy._size);
-
-		return *this;
-	}
-
-	char *ByteArray::Resize(size_t newSize)
-	{
-		_bytes = (char *) realloc(_bytes, newSize);
-		_size = newSize;
-		return _bytes;
-	}
-
-	//
 	// Wnd
 	//
 
@@ -427,7 +400,7 @@ namespace WndLib
 
 	void Wnd::Construct()
 	{
-		_hwndx = NULL;
+		_hwnd = NULL;
 		_prevproc = NULL;
 		_selfDestruct = false;
 	}
@@ -453,12 +426,12 @@ namespace WndLib
 		if (! alreadyAttached && ! Map(hwnd, this))
 			return false;
 
-		_hwndx = hwnd;
+		_hwnd = hwnd;
 
 		if (subclass)
 		{
-			_prevproc = HelpGetWndProc(_hwndx);
-			HelpSetWndProc(_hwndx, &SubclassWndProc);
+			_prevproc = HelpGetWndProc(_hwnd);
+			HelpSetWndProc(_hwnd, &SubclassWndProc);
 		}
 
 		return true;
@@ -466,29 +439,29 @@ namespace WndLib
 
 	void Wnd::SetHWnd(HWND hwnd)
 	{
-		_hwndx = hwnd;
+		_hwnd = hwnd;
 	}
 
 	HWND Wnd::Detach()
 	{
 		if (_prevproc)
 		{
-			if (HelpGetWndProc(_hwndx) == &SubclassWndProc)
+			if (HelpGetWndProc(_hwnd) == &SubclassWndProc)
 			{
-				HelpSetWndProc(_hwndx, _prevproc);
+				HelpSetWndProc(_hwnd, _prevproc);
 			}
 			else
 			{
 				OutputDebugStringA(
 					"Wnd::Detach: unable to un-subclass window "
 					"(using window's window class).\r\n");
-				HelpSetWndProc(_hwndx, HelpGetClassWndProc(_hwndx));
+				HelpSetWndProc(_hwnd, HelpGetClassWndProc(_hwnd));
 			}
 
 			_prevproc = NULL;
 		}
 
-		HWND hwnd = _hwndx;
+		HWND hwnd = _hwnd;
 		Unmap(this);
 		return hwnd;
 	}
@@ -663,7 +636,7 @@ namespace WndLib
 			Map(hwnd, wnd);
 
 			HelpSetWindowPtr(hwnd, 0, (const void *) wnd);
-			wnd->_hwndx = hwnd;
+			wnd->_hwnd = hwnd;
 		}
 
 		LRESULT result = wnd->WndProc(msg, wparam, lparam);
@@ -714,6 +687,16 @@ namespace WndLib
 		return (*_defWindowProc) (GetHWnd(), msg, wparam, lparam);
 	}
 
+	bool Wnd::PreTranslateMessage(MSG *)
+	{
+		return false;
+	}
+
+	bool Wnd::FilterMessage(MSG *)
+	{
+		return false;
+	}
+
 	bool Wnd::Map(HWND hwnd, Wnd *wnd)
 	{
 		CriticalSection::ScopedLock lock(mapLock);
@@ -743,7 +726,7 @@ namespace WndLib
 	{
 		CriticalSection::ScopedLock lock(mapLock);
 
-		wnd->_hwndx = NULL;
+		wnd->_hwnd = NULL;
 
 		WndMapping **prev = &mapStart;
 		for (WndMapping *m = mapStart; m; prev = &m->next, m = m->next)
@@ -888,13 +871,12 @@ namespace WndLib
 		}
 	}
 
-	LPCTSTR Wnd::GetWindowText(ByteArray *buffer)
+	WinString Wnd::GetWindowText()
 	{
-		DWORD len = GetTextLength();
-		buffer->Resize((len + 1) * 2);
-		GetWindowText((TCHAR *) buffer->Get(), len + 1);
-		TCHAR *string = (TCHAR *) buffer->Get();
-		string[len] = 0;
+		WinString string;
+		string.resize(GetTextLength());
+		if (! string.empty())
+			GetWindowText(&string[0], string.size());
 		return string;
 	}
 
@@ -922,21 +904,50 @@ namespace WndLib
 		return tm.tmAveCharWidth;
 	}
 
-	LPCTSTR Wnd::GetDlgItemText(int id, ByteArray *buffer)
+	WinString Wnd::GetDlgItemText(int id)
 	{
-		buffer->Resize(128);
+		WinString string;
+		string.resize(128);
 		for (;;) {
-			DWORD dwCapacity = buffer->GetSize() / sizeof(TCHAR);
-			UINT uGot = GetDlgItemText(id, (TCHAR *) buffer->Get(), dwCapacity);
+			UINT uGot = GetDlgItemText(id, (TCHAR *) &string[0], string.size());
 
-			if (uGot < dwCapacity - 1)
-			{
-				((TCHAR *) buffer->Get())[uGot] = 0;
-				return (const TCHAR *) buffer->Get();
-			}
+			if (uGot < string.size()) // Intentional off by one to account for \0
+				return string;
 
-			buffer->Resize(buffer->GetSize() * 2);
+			string.resize(string.size() * 2);
 		}
+	}
+
+	//
+	// MainWnd
+	//
+
+	WND_WM_BEGIN(MainWnd, Wnd)
+		WND_WM(WM_CLOSE, OnClose)
+		WND_WM(WM_DESTROY, OnDestroy)
+	WND_WM_END()
+
+	LRESULT MainWnd::OnClose(UINT, WPARAM, LPARAM)
+	{
+		DestroyWindow();
+		return 0;
+	}
+
+	LRESULT MainWnd::OnDestroy(UINT msg, WPARAM wparam, LPARAM lparam)
+	{
+		PostQuitMessage(0);
+		return BaseWndProc(msg, wparam, lparam);
+	}
+
+	bool MainWnd::FilterMessage(MSG *msg)
+	{
+		if (_accel.TranslateAccelerator(GetHWnd(), msg))
+			return true;
+
+		if (IsDialogMessage(GetHWnd(), msg))
+			return true;
+
+		return false;
 	}
 
 	//
@@ -1511,6 +1522,23 @@ namespace WndLib
 		return (INT)startpos - LineIndex(line);
 	}
 
+	WinString EditWnd::GetLine(UINT line)
+	{
+		WinString string;
+		string.resize(256);
+		for (;;)
+		{
+			UINT got = GetLine(line, &string[0], string.size());
+			if (got < string.size()) 
+			{
+				string.resize(got);
+				return string;
+			}
+
+			string.resize(string.size() * 2);
+		}
+	}
+
 	//
 	// ListBoxWnd
 	//
@@ -1528,6 +1556,15 @@ namespace WndLib
 		return TEXT("LISTBOX");
 	}
 
+	WinString ListBoxWnd::GetText(INT item)
+	{
+		WinString string;
+		string.resize(GetTextLen(item));
+		if (! string.empty())
+			GetText(item, &string[0]);
+		return string;
+	}
+
 	//
 	// ComboBoxWnd
 	//
@@ -1543,6 +1580,15 @@ namespace WndLib
 	LPCTSTR ComboBoxWnd::GetClassName()
 	{
 		return TEXT("COMBOBOX");
+	}
+
+	WinString ComboBoxWnd::GetLBText(INT index)
+	{
+		WinString string;
+		string.resize(GetLBTextLen(index));
+		if (! string.empty())
+			GetLBText(index, &string[0]);
+		return string;
 	}
 
 	//
@@ -2084,6 +2130,15 @@ namespace WndLib
 		}
 	}
 
+	WinString StatusBarWnd::GetText(int part)
+	{
+		WinString string;
+		string.resize(GetTextLength(part));
+		if (! string.empty()) 
+			GetText(part, &string[0]);
+		return string;
+	}
+
 	//
 	// TabControlWnd
 	//
@@ -2172,6 +2227,15 @@ namespace WndLib
 			button.iString = -1;
 
 		return AddButtons(1, &button);
+	}
+
+	WinString ToolbarWnd::GetButtonText(int commandid)
+	{
+		WinString string;
+		string.resize(GetButtonText(commandid, NULL));
+		if (! string.empty())
+			GetButtonText(commandid, &string[0]);
+		return string;
 	}
 
 	//

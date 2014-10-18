@@ -18,7 +18,6 @@ namespace WndLib
 
 	LogWnd::LogWnd()
 	{
-		_font = NULL;
 		_logEntry = _lastLogEntry = 0;
 		_userDidClose = false;
 	}
@@ -26,9 +25,6 @@ namespace WndLib
 	LogWnd::~LogWnd()
 	{
 		DestroyWindow();
-
-		if (_font)
-			DeleteObject(_font);
 
 		CriticalSection::ScopedLock lock(_cs);
 
@@ -58,7 +54,7 @@ namespace WndLib
 	LRESULT LogWnd::OnCreate(UINT msg, WPARAM wparam, LPARAM lparam)
 	{
 		if (! _font)
-			_font = CreateShellFont();
+			_font.CreateShellFont();
 
 		_icons.LoadExeIcons();
 
@@ -196,7 +192,7 @@ namespace WndLib
 		CriticalSection::ScopedLock lock(_cs);
 
 		std::auto_ptr<LogEntry> logEntry(new LogEntry);
-		logEntry->text.Set(log, lstrlen(log) + 1);
+		logEntry->text = log;
 		logEntry->colour = colour;
 		logEntry->showCommand = showCommand;
 		logEntry->next = 0;
@@ -208,7 +204,10 @@ namespace WndLib
 
 		_lastLogEntry = logEntry.release();
 
-		PostMessage(WM_USER);
+		if (GetWindowThreadProcessId(GetHWnd(), NULL) == GetCurrentThreadId())
+			ProcessQueue();
+		else
+			PostMessage(WM_USER);
 	}
 
 	void LogWnd::Format(COLORREF colour, ShowCommand showCommand, const TCHAR *fmt, ...)
@@ -242,7 +241,7 @@ namespace WndLib
 				if (_logEntry->showCommand > highestShowCommand)
 					highestShowCommand = _logEntry->showCommand;
 
-				AppendEditControl(_logEntry->text.Get());
+				AppendEditControl(_logEntry->text.c_str());
 
 				LogEntry *next = _logEntry->next;
 				delete _logEntry;

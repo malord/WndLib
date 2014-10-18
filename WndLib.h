@@ -1,6 +1,6 @@
 //
 // WndLib
-// Copyright (c) 1994-2013 Mark H. P. Lord. All rights reserved.
+// Copyright (c) 1994-2014 Mark H. P. Lord. All rights reserved.
 //
 // See LICENSE.txt for license.
 //
@@ -94,15 +94,19 @@
 
 #include <richedit.h>
 #include <commctrl.h>
+#include <shellapi.h>
 #include <assert.h>
 #include <winreg.h>
 #include <stdio.h>
+#include <string>
 
 #define WNDLIB_ASSERT assert
 #define WNDLIB_COUNTOF(arr) (sizeof(arr) / sizeof((arr)[0]))
 
 namespace WndLib
 {
+	typedef std::basic_string<TCHAR> WinString;
+
 	//
 	// Instance handle
 	//
@@ -124,6 +128,10 @@ namespace WndLib
 	{
 		Private::hInstance = instance;
 	}
+
+	// Invoke FilterMessage and PreTranslateMessage on the correct 
+	// Wnds for the MSG. Returns true if the message was intercepted.
+	WNDLIB_EXPORT bool FilterMessage(MSG *msg);
 
 	//
 	// Utility functions
@@ -232,98 +240,6 @@ namespace WndLib
 	WNDLIB_EXPORT HFONT CreateStatusFont();
 
 	//
-	// ByteArray: A resizable array of bytes.
-	//
-
-	class WNDLIB_EXPORT ByteArray
-	{
-	public:
-
-		ByteArray() :
-			_bytes(NULL),
-			_size(0)
-		{}
-
-		ByteArray(const void *bytes, size_t size);
-
-		ByteArray(const ByteArray &copy);
-
-		ByteArray &operator = (const ByteArray &copy);
-
-		~ByteArray();
-
-		char *Resize(size_t newSize);
-
-		void Set(const void *bytes, size_t size);
-
-		char *Get() const
-		{
-			return _bytes;
-		}
-
-		size_t GetSize() const
-		{
-			return _size;
-		}
-
-	private:
-
-		char *_bytes;
-		size_t _size;
-	};
-
-	//
-	// DataArray: A resizable array of any POD type.
-	//
-
-	template<typename Type>
-	class DataArray
-	{
-	public:
-
-		DataArray()
-		{}
-
-		DataArray(const Type *array, size_t size) :
-			_bytes(array, size * sizeof(Type))
-		{}
-
-		DataArray(const DataArray &copy) :
-			_bytes(copy._bytes)
-		{}
-
-		DataArray &operator = (const DataArray &copy)
-		{
-			_bytes = copy._bytes;
-			return *this;
-		}
-
-		Type *Resize(size_t newSize)
-		{
-			return (Type *) _bytes.Resize(newSize * sizeof(Type));
-		}
-
-		void Set(const void *bytes, size_t size)
-		{
-			_bytes.Set(bytes, size * sizeof(Type));
-		}
-
-		Type *Get() const
-		{
-			return (Type *) _bytes.Get();
-		}
-
-		size_t GetSize() const
-		{
-			return _bytes.GetSize() / sizeof(Type);
-		}
-
-	private:
-
-		ByteArray _bytes;
-	};
-
-	//
 	// CriticalSection: Wrapper around CRITICAL_SECTION.
 	//
 
@@ -426,7 +342,7 @@ namespace WndLib
 		};
 	}
 
-	class CriticalSection
+	class WNDLIB_EXPORT CriticalSection
 	{
 	public:
 
@@ -601,7 +517,7 @@ namespace WndLib
 		// Get our window handle
 		HWND GetHWnd() const
 		{
-			return _hwndx;
+			return _hwnd;
 		}
 
 		// In this library, unlike MFC, a Wnd is designed to correspond to a
@@ -631,6 +547,13 @@ namespace WndLib
 
 		// Set the size of this window's client area
 		void SetClientAreaSize(int cx, int cy);
+
+		// Allow the window to intercept a TranslateMessage.
+		virtual bool PreTranslateMessage(MSG *msg);
+
+		// Called on the target window and all its ancestors. 
+		// Allows the window to implement TranslateAccelerator.
+		virtual bool FilterMessage(MSG *msg);
 
 		//
 		// API wrappers
@@ -759,7 +682,7 @@ namespace WndLib
 		{
 			return (int) ::GetWindowTextLength(GetHWnd());
 		}
-		LPCTSTR GetWindowText(ByteArray *buffer);
+		WinString GetWindowText();
 
 		HWND GetParent()
 		{
@@ -809,7 +732,7 @@ namespace WndLib
 		{
 			return ::GetDlgItemText(GetHWnd(), id, stringout, maxcount);
 		}
-		LPCTSTR GetDlgItemText(int id, ByteArray *buffer);
+		WinString GetDlgItemText(int id);
 
 		UINT GetDlgItemInt(int id, BOOL *translated, bool issigned)
 		{
@@ -972,7 +895,7 @@ namespace WndLib
 		// Window procedure handler to call if a message is not handled
 		WNDPROC _defWindowProc;
 
-		HWND _hwndx;
+		HWND _hwnd;
 
 		struct WndMapping
 		{
@@ -1222,6 +1145,7 @@ namespace WndLib
 			*(DWORD *) buffer = bufferMaxChars;
 			return (UINT) SendMessage(EM_GETLINE, (WPARAM) line, (LPARAM) buffer);
 		}
+		WinString GetLine(UINT line);
 		UINT GetLineCount()
 		{
 			return (UINT) SendMessage(EM_GETLINECOUNT, 0, 0);
@@ -1454,6 +1378,7 @@ namespace WndLib
 		{
 			return (INT) SendMessage(LB_GETTEXTLEN, (WPARAM) item, 0);
 		}
+		WinString GetText(INT item);
 		INT GetTopIndex()
 		{
 			return (INT) SendMessage(LB_GETTOPINDEX, 0, 0);
@@ -1617,6 +1542,7 @@ namespace WndLib
 		{
 			return (INT) SendMessage(CB_GETLBTEXTLEN, (WPARAM) index, 0);
 		}
+		WinString GetLBText(INT index);
 		INT GetTopIndex()
 		{
 			return (INT) SendMessage(CB_GETTOPINDEX, 0, 0);
@@ -2080,9 +2006,9 @@ namespace WndLib
 		{
 			return (BOOL) SendMessage(EM_SETPUNCTUATION, (WPARAM) type, (LPARAM) chars);
 		}
-		BOOL SetTargetDevice(HDC dc, int linewidth)
+		BOOL SetTargetDevice(HDC hdc, int linewidth)
 		{
-			return (BOOL) SendMessage(EM_SETTARGETDEVICE, (WPARAM) dc, (LPARAM) linewidth);
+			return (BOOL) SendMessage(EM_SETTARGETDEVICE, (WPARAM) hdc, (LPARAM) linewidth);
 		}
 		BOOL SetTextMode(WPARAM mode)
 		{
@@ -2143,11 +2069,12 @@ namespace WndLib
 	// ImageList
 	//
 
-	class ImageList
+	class WNDLIB_EXPORT ImageList
 	{
 	public:
 
-		ImageList() : _handle(NULL)
+		ImageList() : 
+			_handle(NULL)
 		{
 		}
 		~ImageList()
@@ -2197,15 +2124,15 @@ namespace WndLib
 				_handle = NULL;
 			}
 		}
-		bool Draw(int index, HDC dc, int x, int y, UINT style)
+		bool Draw(int index, HDC hdc, int x, int y, UINT style)
 		{
-			WNDLIB_ASSERT(_handle != NULL); return ImageList_Draw(_handle, index, dc, x, y, style) != FALSE;
+			WNDLIB_ASSERT(_handle != NULL); return ImageList_Draw(_handle, index, hdc, x, y, style) != FALSE;
 		}
-		bool DrawEx(int index, HDC dc, int x, int y, int dx, int dy, COLORREF bkcolor,
+		bool DrawEx(int index, HDC hdc, int x, int y, int dx, int dy, COLORREF bkcolor,
 					COLORREF fgcolor, UINT style)
 		{
 			WNDLIB_ASSERT(_handle != NULL);
-			return ImageList_DrawEx(_handle, index, dc, x, y, dx, dy, bkcolor, fgcolor, style) != FALSE;
+			return ImageList_DrawEx(_handle, index, hdc, x, y, dx, dy, bkcolor, fgcolor, style) != FALSE;
 		}
 		bool DrawIndirect(IMAGELISTDRAWPARAMS *params)
 		{
@@ -3245,7 +3172,7 @@ namespace WndLib
 		{
 			return (BOOL) SendMessage(PSM_SETCURSELID, (WPARAM) 0, (LPARAM) id);
 		}
-		LRESULT SetFinishText(LPTSTR lpsztext)
+		LRESULT SetFinishText(LPCTSTR lpsztext)
 		{
 			return (LRESULT) SendMessage(PSM_SETFINISHTEXT, (WPARAM) 0, (LPARAM) lpsztext);
 		}
@@ -3452,6 +3379,7 @@ namespace WndLib
 		{
 			return (int) SendMessage(TB_GETBUTTONTEXT, (WPARAM) commandid, (LPARAM) textOut);
 		}
+		WinString GetButtonText(int commandid);
 		HIMAGELIST GetDisableImageList()
 		{
 			return (HIMAGELIST) SendMessage(TB_GETDISABLEDIMAGELIST, 0, 0);
@@ -3805,6 +3733,7 @@ namespace WndLib
 		{
 			return (DWORD) SendMessage(SB_GETTEXTLENGTH, (WPARAM) part, 0);
 		}
+		WinString GetText(int part);
 		BOOL IsSimple()
 		{
 			return (BOOL) SendMessage(SB_ISSIMPLE, 0, 0);
@@ -4522,6 +4451,837 @@ namespace WndLib
 		HICON _icons[2];
 	};
 
+	//
+	// GDIObject
+	//
+
+	class WNDLIB_EXPORT GDIObject
+	{
+	public:
+
+		GDIObject() :
+			_handle(NULL)
+		{}
+
+		~GDIObject()
+		{
+			DeleteObject();
+		}
+
+		BOOL Attach(HGDIOBJ object)
+		{
+			if (object != _handle)
+			{
+				DeleteObject();
+				_handle = object;
+			}
+
+			return _handle ? TRUE : FALSE;
+		}
+
+		HGDIOBJ Detach()
+		{
+			HGDIOBJ object = _handle;
+			_handle = NULL;
+			return object;
+		}
+
+		void DeleteObject()
+		{
+			if (_handle)
+			{
+				::DeleteObject(_handle);
+				_handle = NULL;
+			}
+		}
+
+		BOOL CreateStockObject(INT index)
+		{
+			DeleteObject();
+			_handle = ::GetStockObject(index);
+			return _handle != NULL;
+		}
+
+		int GetObject(int bufferSize, LPVOID buffer) const
+		{
+			WNDLIB_ASSERT(_handle);
+			return ::GetObject(_handle, bufferSize, buffer);
+		}
+
+		DWORD GetObjectType() const
+		{
+			WNDLIB_ASSERT(_handle);
+			return ::GetObjectType(_handle);
+		}
+
+		HGDIOBJ GetHandle() const
+		{
+			return _handle;
+		}
+		operator HGDIOBJ () const
+		{
+			return _handle;
+		}
+		bool operator ! () const
+		{
+			return _handle == NULL;
+		}
+		operator bool () const
+		{
+			return _handle != NULL;
+		}
+
+		BOOL UnrealizeObject()
+		{
+			WNDLIB_ASSERT(_handle);
+			return ::UnrealizeObject(_handle);
+		}
+
+		bool operator == (const GDIObject &other) const 
+		{
+			return _handle == other._handle; 
+		}
+		bool operator != (const GDIObject &other) const 
+		{ 
+			return ! operator == (other); 
+		}
+
+	protected:
+
+		HGDIOBJ _handle;
+	};
+
+	//
+	// Font
+	//
+
+	class WNDLIB_EXPORT Font : public GDIObject
+	{
+	public:
+
+		BOOL CreateFont(int height, int width, int escapement, int orientation, int weight, 
+		                BYTE italic, BYTE underline, BYTE strikeout, BYTE charset, 
+		                BYTE outPrecision, BYTE clipPrecision, BYTE quality, BYTE pitchAndFamiliy,
+		                LPTSTR faceName)
+		{
+			return Attach(::CreateFont(height, width, escapement, orientation, weight,
+			              			   italic, underline, strikeout, charset, 
+			              			   outPrecision, clipPrecision, quality, pitchAndFamiliy, faceName));
+		}
+
+		BOOL CreateFontIndirect(LOGFONT *logfont)
+		{
+			return Attach(::CreateFontIndirect(logfont));
+		}
+
+		int GetLogFont(LOGFONT *logfont)
+		{
+			return GetObject(sizeof(*logfont), logfont);
+		}
+
+		operator HFONT() const
+		{
+			return (HFONT) GetHandle();
+		}
+
+		BOOL EasyCreateFont(HDC hdc, LPCTSTR facename, int decipts, int flags)
+		{
+			return Attach(WndLib::EasyCreateFont(hdc, facename, decipts, flags));
+		}
+
+		BOOL CreateShellFont()
+		{
+			return Attach(WndLib::CreateShellFont());
+		}
+
+		BOOL CreateMenuFont()
+		{
+			return Attach(WndLib::CreateMenuFont());
+		}
+
+		BOOL CreateStatusFont()
+		{
+			return Attach(WndLib::CreateStatusFont());
+		}
+	};
+
+	//
+	// Bitmap
+	//
+
+	class WNDLIB_EXPORT Bitmap : public GDIObject
+	{
+	public:
+
+		BOOL CreateBitmap(int width, int height, UINT planes, UINT bitcount, const void *bits)
+		{
+			return Attach(::CreateBitmap(width, height, planes, bitcount, bits));
+		}
+
+		BOOL CreateBitmapIndirect(LPBITMAP bitmap)
+		{
+			return Attach(::CreateBitmapIndirect(bitmap));
+		}
+
+		BOOL CreateCompatibleBitmap(HDC hdc, int width, int height)
+		{
+			return Attach(::CreateCompatibleBitmap(hdc, width, height));
+		}
+
+		BOOL CreateDiscardableBitmap(HDC hdc, int width, int height)
+		{
+			return Attach(::CreateDiscardableBitmap(hdc, width, height));
+		}
+
+		DWORD GetBitmapBits(DWORD count, LPVOID bits) const
+		{
+			return ::GetBitmapBits((HBITMAP) GetHandle(), count, bits);
+		}
+
+		BOOL LoadBitmap(LPCTSTR resourcename)
+		{
+			return Attach(::LoadBitmap(GetHInstance(), resourcename));
+		}
+
+		BOOL LoadBitmap(UINT resourceid)
+		{
+			return Attach(::LoadBitmap(GetHInstance(), MAKEINTRESOURCE(resourceid)));
+		}
+
+		DWORD SetBitmapBits(DWORD count, const void *bits)
+		{
+			return ::SetBitmapBits((HBITMAP) GetHandle(), count, bits);
+		}
+
+		int GetBitmap(BITMAP *b)
+		{
+			return GetObject(sizeof(*b), b);
+		}
+
+		operator HBITMAP () const
+		{
+			return (HBITMAP) GetHandle();
+		}
+	};
+
+	//
+	// Brush
+	//
+
+	class WNDLIB_EXPORT Brush : public GDIObject
+	{
+	public:
+
+		BOOL CreateBrushIndirect(const LOGBRUSH *lb)
+		{
+			return Attach(::CreateBrushIndirect(lb));
+		}
+
+		BOOL CreateHatchBrush(int index, COLORREF color)
+		{
+			return Attach(::CreateHatchBrush(index, color));
+		}
+
+		BOOL CreatePatternBrush(HBITMAP bitmap)
+		{
+			return Attach(::CreatePatternBrush(bitmap));
+		}
+
+		BOOL CreateSolidBrush(COLORREF color)
+		{
+			return Attach(::CreateSolidBrush(color));
+		}
+
+		BOOL CreateSysColorBrush(int index)
+		{
+			return Attach(::GetSysColorBrush(index));
+		}
+
+		int GetLogBrush(LOGBRUSH *lb)
+		{
+			return GetObject(sizeof(*lb), lb);
+		}
+
+		operator HBRUSH () const
+		{
+			return (HBRUSH) GetHandle();
+		}
+	};
+
+	//
+	// Pen
+	//
+
+	class WNDLIB_EXPORT Pen : public GDIObject
+	{
+	public:
+
+		BOOL CreatePen(int style, int width, COLORREF color)
+		{
+			return Attach(::CreatePen(style, width, color));
+		}
+
+		BOOL CreatePenIndirect(LPLOGPEN lp)
+		{
+			return Attach(::CreatePenIndirect(lp));
+		}
+
+		int GetLogPen(LOGPEN *lp)
+		{
+			return GetObject(sizeof(*lp), lp);
+		}
+
+		int GetExtLogPen(EXTLOGPEN *elp)
+		{
+			return GetObject(sizeof(*elp), elp);
+		}
+
+		operator HPEN () const
+		{
+			return (HPEN) GetHandle();
+		}
+	};
+
+	//
+	// Palette
+	//
+
+	class WNDLIB_EXPORT Palette : public GDIObject
+	{
+	public:
+
+		int GetNumEntries(WORD *w)
+		{
+			return GetObject(sizeof(*w), w);
+		}
+
+		operator HPALETTE () const
+		{
+			return (HPALETTE) GetHandle();
+		}
+	};
+
+	//
+	// Region
+	//
+
+	class WNDLIB_EXPORT Region : public GDIObject
+	{
+	public:
+
+		operator HRGN () const
+		{
+			return (HRGN) GetHandle();
+		}
+	};
+
+	//
+	// DC
+	//
+
+	class WNDLIB_EXPORT DC
+	{
+	public:
+
+		DC() :
+			_handle(NULL)
+		{}
+
+		virtual ~DC()
+		{
+			DeleteDC();
+		}
+
+		BOOL CreateDC(LPCTSTR driverName, LPCTSTR deviceName, LPCTSTR output, const DEVMODE *initData)
+		{
+			return Attach(::CreateDC(driverName, deviceName, output, initData));
+		}
+
+		BOOL CreateCompatibleDC(HDC hdc)
+		{
+			return Attach(::CreateCompatibleDC(hdc));
+		}
+
+		BOOL Attach(HDC hdc)
+		{
+			if (_handle != hdc)
+			{
+				DeleteDC();
+				_handle = hdc;
+			}
+
+			return _handle ? TRUE : FALSE;
+		}
+
+		virtual BOOL DeleteDC()
+		{
+			return _handle ? ::DeleteDC(_handle) : TRUE;
+		}
+
+		HDC Detach()
+		{
+			HDC hdc = _handle;
+			_handle = NULL;
+			return hdc;
+		}
+
+		HDC GetHandle() const
+		{
+			return _handle;
+		}
+		operator HDC() const
+		{
+			return _handle;
+		}
+
+		bool operator ! () const
+		{
+			return _handle == NULL;
+		}
+
+	private:
+
+		HDC _handle;
+	};
+
+	//
+	// PaintDC
+	//
+
+	class WNDLIB_EXPORT PaintDC : public DC
+	{
+	public:
+
+		PaintDC(HWND hwnd)
+		{
+			BeginPaint(hwnd);
+		}
+
+		PaintDC(Wnd *wnd)
+		{
+			BeginPaint(wnd);
+		}
+
+		PaintDC()
+		{}
+
+		~PaintDC()
+		{
+			EndPaint();
+		}
+
+		BOOL BeginPaint(Wnd *wnd)
+		{
+			return BeginPaint(wnd->GetHWnd());
+		}
+
+		BOOL BeginPaint(HWND hwnd)
+		{
+			DeleteDC();
+
+			if (::BeginPaint(hwnd, &_ps))
+			{
+				_hwnd = hwnd;
+				Attach(_ps.hdc);
+				return TRUE;
+			}
+
+			return FALSE;
+		}
+
+		BOOL EndPaint()
+		{
+			if (GetHandle())
+			{
+				Detach();
+				::EndPaint(_hwnd, &_ps);
+			}
+
+			return TRUE;
+		}
+
+		virtual BOOL DeleteDC()
+		{
+			return EndPaint();
+		}
+
+	private:
+
+		HWND _hwnd;
+		PAINTSTRUCT _ps;
+	};
+
+	//
+	// ClientDC
+	//
+
+	class WNDLIB_EXPORT ClientDC : public DC
+	{
+	public:
+
+		ClientDC(HWND hwnd)
+		{
+			GetDC(hwnd);
+		}
+
+		ClientDC(Wnd *wnd)
+		{
+			GetDC(wnd);
+		}
+
+		ClientDC()
+		{}
+
+		~ClientDC()
+		{
+			ReleaseDC();
+		}
+
+		BOOL GetDC(Wnd *wnd)
+		{
+			return GetDC(wnd->GetHWnd());
+		}
+
+		BOOL GetDC(HWND hwnd)
+		{
+			DeleteDC();
+
+			if (HDC hdc = ::GetDC(hwnd))
+			{
+				_hwnd = hwnd;
+				Attach(hdc);
+				return TRUE;
+			}
+
+			return FALSE;
+		}
+
+		BOOL ReleaseDC()
+		{
+			if (GetHandle())
+			{
+				::ReleaseDC(_hwnd, GetHandle());
+				Detach();
+			}
+
+			return TRUE;
+		}
+
+		virtual BOOL DeleteDC()
+		{
+			return ReleaseDC();
+		}
+
+	private:
+
+		HWND _hwnd;
+	};
+
+	//
+	// WindowDC
+	//
+
+	class WNDLIB_EXPORT WindowDC : public DC
+	{
+	public:
+
+		WindowDC(HWND hwnd)
+		{
+			GetWindowDC(hwnd);
+		}
+
+		WindowDC(Wnd *wnd)
+		{
+			GetWindowDC(wnd);
+		}
+
+		WindowDC()
+		{}
+
+		~WindowDC()
+		{
+			ReleaseDC();
+		}
+
+		BOOL GetWindowDC(Wnd *wnd)
+		{
+			return GetWindowDC(wnd->GetHWnd());
+		}
+
+		BOOL GetWindowDC(HWND hwnd)
+		{
+			DeleteDC();
+
+			if (HDC hdc = ::GetWindowDC(hwnd))
+			{
+				_hwnd = hwnd;
+				Attach(hdc);
+				return TRUE;
+			}
+
+			return FALSE;
+		}
+
+		BOOL ReleaseDC()
+		{
+			if (GetHandle())
+			{
+				::ReleaseDC(_hwnd, GetHandle());
+				Detach();
+			}
+
+			return TRUE;
+		}
+
+		virtual BOOL DeleteDC()
+		{
+			return ReleaseDC();
+		}
+
+	private:
+
+		HWND _hwnd;
+	};
+
+	//
+	// Accelerators
+	//
+
+	class WNDLIB_EXPORT Accelerators
+	{
+	public:
+
+		Accelerators() :
+			_handle(NULL)
+		{}
+
+		~Accelerators()
+		{
+			DestroyAcceleratorTable();
+		}
+
+		BOOL LoadAccelerators(LPCTSTR resourcename)
+		{
+			DestroyAcceleratorTable();
+
+			return Attach(::LoadAccelerators(GetHInstance(), resourcename));
+		}
+
+		BOOL LoadAccelerators(UINT resourceid)
+		{
+			return LoadAccelerators(MAKEINTRESOURCE(resourceid));
+		}
+
+		void DestroyAcceleratorTable()
+		{
+			if (_handle)
+			{
+				::DestroyAcceleratorTable(_handle);
+				_handle = NULL;
+			}
+		}
+
+		int TranslateAccelerator(HWND hwnd, LPMSG msg)
+		{
+			return _handle ? ::TranslateAccelerator(hwnd, _handle, msg) : 0;
+		}
+
+		BOOL Attach(HACCEL handle)
+		{
+			if (handle != _handle)
+			{
+				DestroyAcceleratorTable();
+				_handle = handle;
+			}
+
+			return _handle ? TRUE : FALSE;
+		}
+
+		HACCEL Detach()
+		{
+			HACCEL handle = _handle;
+			_handle = NULL;
+			return handle;
+		}
+
+		HACCEL GetHandle() const
+		{
+			return _handle;
+		}
+		operator HACCEL () const
+		{
+			return _handle;
+		}
+		bool operator ! () const
+		{
+			return _handle == NULL;
+		}
+
+	private:
+
+		HACCEL _handle;
+	};
+
+	//
+	// Menu
+	//
+
+	class WNDLIB_EXPORT Menu
+	{
+	public:
+
+		Menu() :
+			_handle(NULL)
+		{}
+
+		~Menu()
+		{
+			DestroyMenu();
+		}
+
+		BOOL LoadMenu(LPCTSTR resourcename)
+		{
+			return Attach(::LoadMenu(GetHInstance(), resourcename));
+		}
+
+		BOOL LoadMenu(UINT resourceid)
+		{
+			return LoadMenu(MAKEINTRESOURCE(resourceid));
+		}
+
+		BOOL CreateMenu()
+		{
+			return Attach(::CreateMenu());
+		}
+
+		BOOL CreatePopupMenu()
+		{
+			return Attach(::CreatePopupMenu());
+		}
+
+		void DestroyMenu()
+		{
+			if (_handle)
+			{
+				::DestroyMenu(_handle);
+				_handle = NULL;
+			}
+		}
+
+		BOOL Attach(HMENU handle)
+		{
+			if (handle != _handle)
+			{
+				DestroyMenu();
+				_handle = handle;
+			}
+
+			return _handle ? TRUE : FALSE;
+		}
+
+		HMENU Detach()
+		{
+			HMENU handle = _handle;
+			_handle = NULL;
+			return handle;
+		}
+
+		HMENU GetHandle() const
+		{
+			return _handle;
+		}
+		operator HMENU () const
+		{
+			return _handle;
+		}
+		bool operator ! () const
+		{
+			return _handle == NULL;
+		}
+
+	private:
+
+		HMENU _handle;
+	};
+
+	//
+	// TrayIcon
+	//
+
+	class WNDLIB_EXPORT TrayIcon
+	{
+	public:
+
+		TrayIcon() :
+			_added(false)
+		{}
+
+		~TrayIcon()
+		{
+			Delete();
+		}
+
+		void Create(HWND hwnd, UINT id, DWORD flags, UINT msg, HICON icon, LPCTSTR tip)
+		{
+			memset(&_icon, 0, sizeof(_icon));
+			_icon.cbSize = sizeof(_icon);
+			_icon.hWnd = hwnd;
+			_icon.uID = id;
+			_icon.uFlags = flags;
+			_icon.uCallbackMessage = msg;
+			_icon.hIcon = icon;
+			lstrcpy(_icon.szTip, tip);
+		}
+
+		void Delete()
+		{
+			if (_added)
+				Shell_NotifyIcon(NIM_DELETE, &_icon);
+		}
+
+		void Add()
+		{
+			if (! _added)
+				Shell_NotifyIcon(NIM_ADD, &_icon);
+		}
+
+	private:
+
+		NOTIFYICONDATA _icon;
+		bool _added;
+	};
+
+	//
+	// MainWnd: A Wnd which quits the application when closed and holds an
+	//          Accelerators.
+	//
+
+	class WNDLIB_EXPORT MainWnd : public Wnd
+	{
+		WND_WM_DECLARE(MainWindow, Wnd)
+		WND_WM_FUNC(OnClose)
+		WND_WM_FUNC(OnDestroy)
+		
+	public:
+
+		BOOL LoadAccelerators(LPCTSTR resourcename)
+		{
+			return _accel.LoadAccelerators(resourcename);
+		}
+
+		BOOL LoadAccelerators(UINT resourceid)
+		{
+			return _accel.LoadAccelerators(resourceid);
+		}
+
+		virtual bool FilterMessage(MSG *msg);
+
+	protected:
+
+		Accelerators _accel;
+	};
+
 }
+
 
 #endif

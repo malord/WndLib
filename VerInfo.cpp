@@ -20,14 +20,14 @@ namespace WndLib
 		if (! verinfosize)
 			return false;
 
-		ByteArray verinfobuf;
-		verinfobuf.Resize(verinfosize);
+		std::string verinfobuf;
+		verinfobuf.resize(verinfosize);
 
 		// Cast away constness for Win98
-		if (! GetFileVersionInfo((TCHAR *) filename, zerohandle, verinfosize, verinfobuf.Get()))
+		if (! GetFileVersionInfo((TCHAR *) filename, zerohandle, verinfosize, &verinfobuf[0]))
 			return false;
 
-		void *block = verinfobuf.Get();
+		void *block = &verinfobuf[0];
 
 		{
 			{

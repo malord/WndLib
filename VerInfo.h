@@ -1,6 +1,6 @@
 //
 // WndLib
-// Copyright (c) 1994-2013 Mark H. P. Lord. All rights reserved.
+// Copyright (c) 1994-2014 Mark H. P. Lord. All rights reserved.
 //
 // See LICENSE.txt for license.
 //
