@@ -9,7 +9,6 @@ namespace WndLib
 
 	WND_WM_BEGIN(LogWnd, Wnd)
 		WND_WM(WM_CLOSE, OnClose)
-		WND_WM(WM_DESTROY, OnDestroy)
 		WND_WM(WM_CREATE, OnCreate)
 		WND_WM(WM_SIZE, OnSize)
 		WND_WM(WM_USER, OnUser)
@@ -38,12 +37,28 @@ namespace WndLib
 
 	bool LogWnd::Create(LPCTSTR title, HWND parent)
 	{
-		return CreateEx(0, title,
-			WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
-			40, 30,
-			GetSystemMetrics(SM_CXSCREEN) * 40 / 100,
-			GetSystemMetrics(SM_CYSCREEN) * 40 / 100,
-			parent, NULL, GetHInstance(), NULL, false);
+		return Create(title, 0, parent);
+	}
+
+	bool LogWnd::Create(LPCTSTR title, DWORD flags, HWND parent)
+	{
+		_flags = flags;
+		if (_flags & FLAG_CHILD)
+		{
+			return CreateEx(0, NULL, 
+				WS_CHILD | WS_VISIBLE | WS_CLIPCHILDREN | WS_CLIPSIBLINGS, 
+				0, 0, 40, 30, 
+				parent, NULL, GetHInstance());
+		}
+		else
+		{
+			return CreateEx(0, title,
+				WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
+				40, 30,
+				GetSystemMetrics(SM_CXSCREEN) * 40 / 100,
+				GetSystemMetrics(SM_CYSCREEN) * 40 / 100,
+				parent, NULL, GetHInstance());
+		}
 	}
 
 	LPCTSTR LogWnd::GetClassName()
@@ -51,38 +66,48 @@ namespace WndLib
 		return TEXT("LogWnd");
 	}
 
+	void LogWnd::GetWndClass(WNDCLASSEX *wc)
+	{
+		// Wnd fills in most of this for us.
+		Wnd::GetWndClass(wc);
+		
+		wc->hbrBackground = GetSysColorBrush(COLOR_WINDOW);
+	}
+
 	LRESULT LogWnd::OnCreate(UINT msg, WPARAM wparam, LPARAM lparam)
 	{
 		if (! _font)
 			_font.CreateShellFont();
 
-		_icons.LoadExeIcons();
+		const bool ispopup = (_flags & FLAG_CHILD) == 0;
 
-		SendMessage(WM_SETICON, ICON_BIG, (LPARAM) _icons.GetLargeIcon());
-		SendMessage(WM_SETICON, ICON_SMALL, (LPARAM) _icons.GetSmallIcon());
+		if (ispopup)
+		{
+			_icons.LoadModuleIcons();
 
-		const bool hscroll = false;
-		const bool vscroll = true;
-		const bool border = false;
-		const bool clientedge = false;
+			SendMessage(WM_SETICON, ICON_BIG, (LPARAM) _icons.GetLargeIcon());
+			SendMessage(WM_SETICON, ICON_SMALL, (LPARAM) _icons.GetSmallIcon());
+		}
 
-		if (! _edit.CreateEx(clientedge ? WS_EX_CLIENTEDGE : 0, TEXT(""),
+		DWORD clientedge = (_flags & FLAG_CLIENT_EDGE) ? WS_EX_CLIENTEDGE : 0;
+
+		if (! _edit.CreateEx(clientedge, TEXT(""),
 			WS_CHILD | WS_VISIBLE | ES_MULTILINE | ES_READONLY |
-			ES_AUTOVSCROLL |
-			WS_CLIPCHILDREN | WS_CLIPSIBLINGS |
-			(hscroll ? (WS_HSCROLL | ES_AUTOHSCROLL) : 0) |
-			(vscroll ? WS_VSCROLL : 0) |
-			(border ? WS_BORDER : 0), 0, 0, 0, 0, GetHWnd(), NULL, NULL, NULL, true))
+			ES_AUTOVSCROLL | WS_CLIPCHILDREN | WS_CLIPSIBLINGS | WS_VSCROLL, 
+			0, 0, 0, 0, GetHWnd(), NULL, NULL, NULL, true))
 		{
 			return -1;
 		}
 
 		_edit.SetFont(_font);
 
-		RECT desktopRect;
-		SystemParametersInfo(SPI_GETWORKAREA, 0, (PVOID) &desktopRect, FALSE);
-		SetWindowPos(NULL, desktopRect.left + 16, desktopRect.top + 16, 0, 0,
-			SWP_NOZORDER | SWP_NOSIZE | SWP_NOACTIVATE);
+		if (ispopup)
+		{
+			RECT desktopRect;
+			SystemParametersInfo(SPI_GETWORKAREA, 0, (PVOID) &desktopRect, FALSE);
+			SetWindowPos(NULL, desktopRect.left + 16, desktopRect.top + 16, 0, 0,
+				SWP_NOZORDER | SWP_NOSIZE | SWP_NOACTIVATE);
+		}
 
 		return BaseWndProc(msg, wparam, lparam);
 	}
@@ -92,7 +117,12 @@ namespace WndLib
 		RECT rect;
 		GetClientRect(&rect);
 
-		_edit.SetWindowPos(NULL, 0, 0, rect.right-rect.left, rect.bottom-rect.top,
+		const bool pad = ! (_flags & FLAG_NO_PADDING) ;
+
+		if (pad)
+			InflateRect(&rect, -2, -2);
+
+		_edit.SetWindowPos(NULL, rect.left, rect.top, rect.right-rect.left, rect.bottom-rect.top,
 			SWP_NOZORDER);
 
 		return BaseWndProc(msg, wparam, lparam);
@@ -106,13 +136,8 @@ namespace WndLib
 
 	LRESULT LogWnd::OnClose(UINT, WPARAM, LPARAM)
 	{
-		ShowWindow(SW_HIDE);
+		ShowFrame(SW_HIDE);
 		_userDidClose = true;
-		return 0;
-	}
-
-	LRESULT LogWnd::OnDestroy(UINT, WPARAM, LPARAM)
-	{
 		return 0;
 	}
 
@@ -214,11 +239,10 @@ namespace WndLib
 	{
 		va_list argPtr;
 		va_start(argPtr, fmt);
-		TCHAR buffer[1024];
-		Tvsnprintf(buffer, WNDLIB_COUNTOF(buffer), fmt, argPtr);
+		TCharString formatted = TCharFormatVA(fmt, argPtr);
 		va_end(argPtr);
 
-		Log(buffer, colour, showCommand);
+		Log(formatted.c_str(), colour, showCommand);
 	}
 
 	LRESULT LogWnd::OnUser(UINT, WPARAM, LPARAM)
@@ -258,7 +282,7 @@ namespace WndLib
 			if (highestShowCommand == SHOWCOMMAND_ALERT ||
 				(highestShowCommand >= SHOWCOMMAND_SHOW_IN_BACKGROUND && ! _userDidClose))
 			{
-				ShowWindow(highestShowCommand == SHOWCOMMAND_SHOW_IN_BACKGROUND ? SW_SHOWNOACTIVATE : SW_SHOWNORMAL);
+				ShowFrame(highestShowCommand == SHOWCOMMAND_SHOW_IN_BACKGROUND ? SW_SHOWNOACTIVATE : SW_SHOWNORMAL);
 				_edit.ExSetSel(0, 0);
 				_edit.ScrollCaret();
 				ScrollEditControl();
@@ -310,21 +334,36 @@ namespace WndLib
 			if (! IsVisible())
 			{
 				if (inBackground)
-					ShowWindow(SW_SHOWNOACTIVATE);
+					ShowFrame(SW_SHOWNOACTIVATE);
 				else
-					ShowWindow(SW_SHOWNORMAL);
+					ShowFrame(SW_SHOWNORMAL);
 			}
 		}
 		else
 		{
 			if (IsVisible())
-				ShowWindow(SW_HIDE);
+				ShowFrame(SW_HIDE);
 		}
 	}
 
 	bool LogWnd::IsVisible()
 	{
 		return GetHWnd() && IsWindowVisible();
+	}
+
+	void LogWnd::ShowFrame(int command)
+	{
+		for (HWND hwnd = GetHWnd(), hparent; hwnd; hwnd = hparent)
+		{
+			hparent = ::GetParent(hwnd);
+			if (! hparent)
+			{
+				::ShowWindow(hwnd, command);
+				return;
+			}
+
+			hwnd = hparent;
+		}
 	}
 }
 

@@ -2,6 +2,7 @@
 
 #ifdef _MSC_VER
 	#pragma warning(disable:4996)
+	#pragma comment(lib, "version.lib")
 #endif
 
 namespace WndLib
@@ -59,21 +60,21 @@ namespace WndLib
 					LangCodePage lcp = *(const LangCodePage *) data;
 
 					// Extract product name
-					Tsnprintf(strbuf, WNDLIB_COUNTOF(strbuf),
+					TCharStringFormat(strbuf, WNDLIB_COUNTOF(strbuf),
 						TEXT("\\StringFileInfo\\%04x%04x\\FileDescription"),
 						lcp.language, lcp.codepage);
 					if (VerQueryValue(block, strbuf, &data, &datalen))
 						lstrcpy(_title, (LPCTSTR) data);
 
 					// Extract copyright notice
-					Tsnprintf(strbuf, WNDLIB_COUNTOF(strbuf),
+					TCharStringFormat(strbuf, WNDLIB_COUNTOF(strbuf),
 						TEXT("\\StringFileInfo\\%04x%04x\\LegalCopyright"),
 						lcp.language, lcp.codepage);
 					if (VerQueryValue(block, strbuf, &data, &datalen))
 						lstrcpy(_copyright, (LPCTSTR) data);
 
 					// Extract comments
-					Tsnprintf(strbuf, WNDLIB_COUNTOF(strbuf),
+					TCharStringFormat(strbuf, WNDLIB_COUNTOF(strbuf),
 						TEXT("\\StringFileInfo\\%04x%04x\\Comments"),
 						lcp.language, lcp.codepage);
 					if (VerQueryValue(block, strbuf, &data, &datalen))

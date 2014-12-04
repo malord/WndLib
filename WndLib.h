@@ -14,15 +14,14 @@
 
 #ifdef _MSC_VER
 
-	// "class X needs to have dll-interface to be used by clients of class Y"
-	#pragma warning(disable:4251)
+	#pragma warning(disable:4251) // "class X needs to have dll-interface to be used by clients of class Y"
+	#pragma warning(disable:4786) // symbol truncated to 255 chars in debug information
 
 	#if defined(WNDLIB_DLL_EXPORT)
 
 		#define WNDLIB_EXPORT __declspec(dllexport)
 
-		// "class X needs to have dll-interface to be used by clients of class Y"
-		#pragma warning(disable:4251)
+		#pragma warning(disable:4251) // "class X needs to have dll-interface to be used by clients of class Y"
 
 	#elif defined(WNDLIB_DLL) || (defined(_USE_DLLS) && ! defined(WNDLIB_STATIC))
 
@@ -48,8 +47,6 @@
 // WINVER, etc., yourself, or include windows.h before including this header. Don't change this header.
 
 #ifndef _WINDOWS_
-
-	// If not overriden elsehwere, require Windows 2000, XP or newer NT based system.
 
 	#ifndef WINVER
 		#define WINVER 0x0400
@@ -98,14 +95,55 @@
 #include <assert.h>
 #include <winreg.h>
 #include <stdio.h>
+#include <stdarg.h>
 #include <string>
+#include <map>
 
 #define WNDLIB_ASSERT assert
 #define WNDLIB_COUNTOF(arr) (sizeof(arr) / sizeof((arr)[0]))
 
+#if defined(va_copy)
+	#define WNDLIB_VA_COPY va_copy
+#elif defined(__va_copy)
+	#define WNDLIB_VA_COPY __va_copy
+#elif defined(_va_copy)
+	#define WNDLIB_VA_COPY _va_copy
+#else
+	#define WNDLIB_VA_COPY(dst, src) ((dst) = (src))
+#endif
+
 namespace WndLib
 {
-	typedef std::basic_string<TCHAR> WinString;
+	//
+	// Strings
+	//
+
+	typedef std::basic_string<TCHAR> TCharString;
+	typedef std::basic_string<WCHAR> WCharString;
+
+	WNDLIB_EXPORT bool TCharStringFormat(TCHAR *buffer, size_t bufferSize, const TCHAR *format, ...);
+	WNDLIB_EXPORT bool TCharStringFormatVA(TCHAR *buffer, size_t bufferSize, const TCHAR *format, va_list argptr);
+
+	WNDLIB_EXPORT bool TCharStringFormat(size_t *length, TCHAR *buffer, size_t bufferSize, const TCHAR *format, ...);
+	WNDLIB_EXPORT bool TCharStringFormatVA(size_t *length, TCHAR *buffer, size_t bufferSize, const TCHAR *format, va_list argptr);
+
+	WNDLIB_EXPORT bool TCharStringCopy(TCHAR *buffer, size_t bufferSize, const TCHAR *source);
+	WNDLIB_EXPORT bool TCharStringAppend(TCHAR *buffer, size_t bufferSize, const TCHAR *source);
+
+	WNDLIB_EXPORT TCharString TCharFormat(LPCTSTR format, ...);
+	WNDLIB_EXPORT TCharString TCharFormatVA(LPCTSTR format, va_list argptr);
+
+	WNDLIB_EXPORT WCharString CharToWide(UINT codepage, const char *string);
+	WNDLIB_EXPORT std::string WideToChar(UINT codepage, const WCHAR *wstring);
+
+	WNDLIB_EXPORT WCharString CharToWide(UINT codepage, const std::string &string);
+	WNDLIB_EXPORT std::string WideToChar(UINT codepage, const WCharString &wstring);
+
+	WNDLIB_EXPORT std::string ToUTF8(LPCTSTR string);
+	WNDLIB_EXPORT std::string ToUTF8(const TCharString &string);
+
+	WNDLIB_EXPORT TCharString FromUTF8(const char *string);
+	WNDLIB_EXPORT TCharString FromUTF8(const std::string string);
 
 	//
 	// Instance handle
@@ -128,6 +166,10 @@ namespace WndLib
 	{
 		Private::hInstance = instance;
 	}
+
+	//
+	// Message Pump
+	//
 
 	// Invoke FilterMessage and PreTranslateMessage on the correct 
 	// Wnds for the MSG. Returns true if the message was intercepted.
@@ -203,18 +245,10 @@ namespace WndLib
 		return (char *) ((((size_t) (const char *) ptr) + (boundary - 1)) & (~(boundary - 1)));
 	}
 
-	// Allocate a copy of str using operator new[].
-	WNDLIB_EXPORT TCHAR *TNewString(LPCTSTR str);
-
-	WNDLIB_EXPORT void Tvsnprintf(TCHAR *buffer, size_t bufferSize, const TCHAR *fmt, va_list argptr);
-
-	WNDLIB_EXPORT void Tsnprintf(TCHAR *buffer, size_t bufferSize, const TCHAR *fmt, ...);
-
-	WNDLIB_EXPORT bool Tstrcpy(TCHAR *buffer, size_t bufferSize, const TCHAR *source);
-	WNDLIB_EXPORT bool Tstrcat(TCHAR *buffer, size_t bufferSize, const TCHAR *source);
-
 	// Returns the DPI scale factor for the system. Does not support per-monitor DPI.
 	WNDLIB_EXPORT double GetDPIScale(HDC hdc = NULL);
+
+	WNDLIB_EXPORT void InitAllCommonControls();
 
 	//
 	// EasyCreateFont
@@ -238,6 +272,21 @@ namespace WndLib
 	WNDLIB_EXPORT HFONT CreateMenuFont();
 
 	WNDLIB_EXPORT HFONT CreateStatusFont();
+
+	//
+	// Common dialogs
+	//
+
+	WNDLIB_EXPORT TCharString BrowseForFolder(HWND parent, LPCTSTR prompt);
+
+	WNDLIB_EXPORT TCharString BrowseForExistingFile(HWND parent, LPCTSTR title, LPCTSTR initialPath, 
+													LPCTSTR filters = TEXT("All Files (*.*)\0*.*\0"), 
+													int initialFilter = 1, LPCTSTR initialDir = NULL);
+
+	WNDLIB_EXPORT TCharString BrowseForNewFile(HWND parent, LPCTSTR title, LPCTSTR initialPath, 
+											   LPCTSTR filters = TEXT("All Files (*.*)\0*.*\0"), 
+											   int initialFilter = 1, LPCTSTR initialDir = NULL);
+
 
 	//
 	// CriticalSection: Wrapper around CRITICAL_SECTION.
@@ -346,8 +395,9 @@ namespace WndLib
 	{
 	public:
 
-		// You can do: CriticalSection::ScopedLock lock(anyCriticalSection) to lock the critical section
-		// and automatically unlock it when lock goes out of scope.
+		// You can do: CriticalSection::ScopedLock lock(anyCriticalSection) to
+		// lock the critical section and automatically unlock it when lock 
+		// goes out of scope.
 		typedef WndLib::Private::ScopedLock<CriticalSection> ScopedLock;
 
 		CriticalSection()
@@ -494,7 +544,7 @@ namespace WndLib
 		}
 
 		// Attach the specified HWND to this object, optionally subclassing it.
-		bool Attach(HWND hwnd, bool subclass = false);
+		void Attach(HWND hwnd, bool subclass = false);
 
 		// Simple form of Attach, does not map the HWND to this object, which
 		// means this function can be used to assign multiple objects to the
@@ -503,9 +553,9 @@ namespace WndLib
 
 		// Attach the specified window (which is specified via a dialogue handle
 		// and a control ID)
-		bool AttachDlgItem(HWND hdlg, int ctlid, bool subclass = false)
+		void AttachDlgItem(HWND hdlg, int ctlid, bool subclass = false)
 		{
-			return Attach(::GetDlgItem(hdlg, ctlid), subclass);
+			Attach(::GetDlgItem(hdlg, ctlid), subclass);
 		}
 
 		// Detach this object from the window.
@@ -682,7 +732,7 @@ namespace WndLib
 		{
 			return (int) ::GetWindowTextLength(GetHWnd());
 		}
-		WinString GetWindowText();
+		TCharString GetWindowText();
 
 		HWND GetParent()
 		{
@@ -732,7 +782,7 @@ namespace WndLib
 		{
 			return ::GetDlgItemText(GetHWnd(), id, stringout, maxcount);
 		}
-		WinString GetDlgItemText(int id);
+		TCharString GetDlgItemText(int id);
 
 		UINT GetDlgItemInt(int id, BOOL *translated, bool issigned)
 		{
@@ -872,8 +922,8 @@ namespace WndLib
 
 	protected:
 
-		static bool Map(HWND hwnd, Wnd *wnd);
-		static bool Unmap(Wnd *wnd);
+		static void Map(HWND hwnd, Wnd *wnd);
+		static void Unmap(Wnd *wnd);
 
 		HWND DoCreateWindowEx(DWORD exStyle, LPCTSTR className, LPCTSTR windowName,
 			DWORD style, int x, int y, int cx, int cy, HWND parent, HMENU menu,
@@ -897,14 +947,9 @@ namespace WndLib
 
 		HWND _hwnd;
 
-		struct WndMapping
-		{
-			HWND hwnd;
-			Wnd *wnd;
-			WndMapping *next;
-		};
+		typedef std::map<HWND, Wnd *> WndMap;
+		static WndMap wndMap;
 
-		static WndMapping *mapStart;
 		static CriticalSection mapLock;
 	};
 
@@ -1145,7 +1190,7 @@ namespace WndLib
 			*(DWORD *) buffer = bufferMaxChars;
 			return (UINT) SendMessage(EM_GETLINE, (WPARAM) line, (LPARAM) buffer);
 		}
-		WinString GetLine(UINT line);
+		TCharString GetLine(UINT line);
 		UINT GetLineCount()
 		{
 			return (UINT) SendMessage(EM_GETLINECOUNT, 0, 0);
@@ -1378,7 +1423,7 @@ namespace WndLib
 		{
 			return (INT) SendMessage(LB_GETTEXTLEN, (WPARAM) item, 0);
 		}
-		WinString GetText(INT item);
+		TCharString GetText(INT item);
 		INT GetTopIndex()
 		{
 			return (INT) SendMessage(LB_GETTOPINDEX, 0, 0);
@@ -1542,7 +1587,7 @@ namespace WndLib
 		{
 			return (INT) SendMessage(CB_GETLBTEXTLEN, (WPARAM) index, 0);
 		}
-		WinString GetLBText(INT index);
+		TCharString GetLBText(INT index);
 		INT GetTopIndex()
 		{
 			return (INT) SendMessage(CB_GETTOPINDEX, 0, 0);
@@ -1892,9 +1937,9 @@ namespace WndLib
 		{
 			return (LRESULT) SendMessage(EM_GETOPTIONS, (WPARAM) 0, (LPARAM) 0);
 		}
-		DWORD GetParaFormat(PARAFORMAT *fmt)
+		DWORD GetParaFormat(PARAFORMAT *format)
 		{
-			return (DWORD) SendMessage(EM_GETPARAFORMAT, (WPARAM) 0, (LPARAM) fmt);
+			return (DWORD) SendMessage(EM_GETPARAFORMAT, (WPARAM) 0, (LPARAM) format);
 		}
 		BOOL GetPunctuation(WPARAM type, PUNCTUATION *pun)
 		{
@@ -1966,9 +2011,9 @@ namespace WndLib
 		{
 			return (COLORREF) SendMessage(EM_SETBKGNDCOLOR, (WPARAM) syscol, (LPARAM) clr);
 		}
-		BOOL SetCharFormat(WPARAM options, CHARFORMAT *fmt)
+		BOOL SetCharFormat(WPARAM options, CHARFORMAT *format)
 		{
-			return (BOOL) SendMessage(EM_SETCHARFORMAT, (WPARAM) options, (LPARAM) fmt);
+			return (BOOL) SendMessage(EM_SETCHARFORMAT, (WPARAM) options, (LPARAM) format);
 		}
 		LRESULT SetEventMask(LPARAM mask)
 		{
@@ -1998,9 +2043,9 @@ namespace WndLib
 		{
 			return (LRESULT) SendMessage(EM_SETPALETTE, (WPARAM) pal, (LPARAM) 0);
 		}
-		BOOL SetParaFormat(PARAFORMAT *fmt)
+		BOOL SetParaFormat(PARAFORMAT *format)
 		{
-			return (BOOL) SendMessage(EM_SETPARAFORMAT, (WPARAM) 0, (LPARAM) fmt);
+			return (BOOL) SendMessage(EM_SETPARAFORMAT, (WPARAM) 0, (LPARAM) format);
 		}
 		BOOL SetPunctuation(WPARAM type, PUNCTUATION *chars)
 		{
@@ -2056,7 +2101,8 @@ namespace WndLib
 	{
 	public:
 
-		static LONG staticLoadLib;
+		// Returns the class name.
+		static LPCTSTR LoadLibrary();
 
 		RichEdit2Wnd();
 		virtual ~RichEdit2Wnd();
@@ -3379,7 +3425,7 @@ namespace WndLib
 		{
 			return (int) SendMessage(TB_GETBUTTONTEXT, (WPARAM) commandid, (LPARAM) textOut);
 		}
-		WinString GetButtonText(int commandid);
+		TCharString GetButtonText(int commandid);
 		HIMAGELIST GetDisableImageList()
 		{
 			return (HIMAGELIST) SendMessage(TB_GETDISABLEDIMAGELIST, 0, 0);
@@ -3733,7 +3779,7 @@ namespace WndLib
 		{
 			return (DWORD) SendMessage(SB_GETTEXTLENGTH, (WPARAM) part, 0);
 		}
-		WinString GetText(int part);
+		TCharString GetText(int part);
 		BOOL IsSimple()
 		{
 			return (BOOL) SendMessage(SB_ISSIMPLE, 0, 0);
@@ -3795,7 +3841,7 @@ namespace WndLib
 	protected:
 
 		bool _menuSelecting;
-		TCHAR *_prevText;
+		TCharString _prevText;
 	};
 
 	//
@@ -4424,7 +4470,7 @@ namespace WndLib
 		~ModuleIcons();
 
 		// Load the icons from this application's executable.
-		bool LoadExeIcons();
+		bool LoadModuleIcons();
 
 		// Load the icons from the specified module.
 		bool LoadIcons(const TCHAR *modulePath);
@@ -5236,13 +5282,19 @@ namespace WndLib
 		void Delete()
 		{
 			if (_added)
+			{
 				Shell_NotifyIcon(NIM_DELETE, &_icon);
+				_added = false;
+			}
 		}
 
 		void Add()
 		{
 			if (! _added)
+			{
 				Shell_NotifyIcon(NIM_ADD, &_icon);
+				_added = true;
+			}
 		}
 
 	private:

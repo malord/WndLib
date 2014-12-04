@@ -1,11 +1,11 @@
 #include "WndLib.h"
 #include <memory>
-#include <shellapi.h>
 #include <algorithm>
+#include <ShlObj.h>
+#include <commdlg.h>
 
 #ifdef _MSC_VER
 	#pragma comment(lib, "comctl32.lib")
-	#pragma comment(lib, "version.lib")
 #endif
 
 #ifndef WM_CHANGEUISTATE
@@ -23,6 +23,12 @@
 	#define UIS_SET 1
 	#define UIS_CLEAR 2
 	#define UIS_INITIALIZE 3
+#endif
+
+#if defined(_MSC_VER) && _MSC_VER >= 1400
+	#pragma comment(linker,"\"/manifestdependency:type='win32' \
+	name='Microsoft.Windows.Common-Controls' version='6.0.0.0' \
+	processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
 #endif
 
 namespace
@@ -120,6 +126,206 @@ namespace
 namespace WndLib
 {
 	//
+	// Strings
+	//
+
+	bool TCharStringFormat(TCHAR *buffer, size_t bufferSize, const TCHAR *format, ...)
+	{
+		va_list argptr;
+		va_start(argptr, format);
+		bool result = TCharStringFormatVA(buffer, bufferSize, format, argptr);
+		va_end(argptr);
+		return result;
+	}
+
+	bool TCharStringFormatVA(TCHAR *buffer, size_t bufferSize, const TCHAR *format, va_list argptr)
+	{
+		size_t length;
+		return TCharStringFormatVA(&length, buffer, bufferSize, format, argptr);
+	}
+
+	bool TCharStringFormatVA(size_t *length, TCHAR *buffer, size_t bufferSize, const TCHAR *format, va_list argptr)
+	{
+		buffer[0] = 0;
+		#ifdef _MSC_VER
+		#pragma warning(disable:4996)
+		#endif
+		#ifdef WNDLIB_UNICODE
+			ptrdiff_t result = _vsnwprintf(buffer, bufferSize, format, argptr);
+		#else
+			ptrdiff_t result = _vsnprintf(buffer, bufferSize, format, argptr);
+		#endif
+		#ifdef _MSC_VER
+		#pragma warning(default:4996)
+		#endif
+		buffer[bufferSize - 1] = 0;
+		if (result < 0 || result >= (ptrdiff_t) bufferSize)
+		{
+			*length = (size_t) -1;
+			return false;
+		}
+
+		*length = result;
+		return true;
+	}
+
+	bool TCharStringFormat(size_t *length, TCHAR *buffer, size_t bufferSize, const TCHAR *format, ...)
+	{
+		va_list argptr;
+		va_start(argptr, format);
+		bool result = TCharStringFormatVA(length, buffer, bufferSize, format, argptr);
+		va_end(argptr);
+		return result;
+	}
+
+	bool TCharStringCopy(TCHAR *buffer, size_t bufferSize, const TCHAR *src)
+	{
+		if (! bufferSize)
+			return false;
+
+		TCHAR *terminator = buffer + bufferSize - 1;
+
+		while (*src) {
+			if (buffer == terminator) {
+				*buffer = 0;
+				return false;
+			}
+
+			*buffer++ = *src++;
+		}
+
+		*buffer = 0;
+		return true;
+	}
+
+	bool TCharStringAppend(TCHAR *buffer, size_t bufferSize, const TCHAR *src)
+	{
+		size_t length = lstrlen(buffer);
+
+		if (length >= bufferSize)
+			return false;
+
+		return TCharStringCopy(buffer + length, bufferSize - length, src);
+	}
+
+	TCharString TCharFormat(LPCTSTR format, ...)
+	{
+		va_list argptr;
+		va_start(argptr, format);
+		TCharString result = TCharFormatVA(format, argptr);
+		va_end(argptr);
+		return result;
+	}
+
+	TCharString TCharFormatVA(LPCTSTR format, va_list argptr)
+	{
+		const size_t MAX_LENGTH = 1u << 16;
+		TCharString temp(128, 0);
+		for (;;)
+		{
+			va_list argptr2;
+			WNDLIB_VA_COPY(argptr2, argptr);
+			size_t length;
+			bool ok = TCharStringFormatVA(&length, &temp[0], temp.size() - 1, format, argptr);
+			va_end(argptr);
+
+			if (ok)
+				return TCharString(temp, 0, length);
+
+			if (temp.size() > MAX_LENGTH)
+				return TCharString();
+
+			temp.resize(temp.size() * 2);
+		}
+	}
+
+	std::string WideToChar(UINT codepage, const WCHAR *wstring)
+	{
+		int len = WideCharToMultiByte(codepage, 0, wstring, -1, 0, 0, 0, 0);		
+		if (len < 0) 
+		{
+			WNDLIB_ASSERT(0);
+			return std::string();
+		}
+
+		std::string string(len, 0);
+		WideCharToMultiByte(codepage, 0, wstring, -1, &string[0], len, 0, 0);
+		string.resize(len - 1);
+		return string;
+	}
+
+	WCharString CharToWide(UINT codepage, const char *string)
+	{
+		int len = MultiByteToWideChar(codepage, 0, string, -1, 0, 0);
+		if (len < 0) 
+		{
+			WNDLIB_ASSERT(0);
+			return WCharString();
+		}
+
+		WCharString wstring(len, 0);
+		MultiByteToWideChar(codepage, 0, string, -1, &wstring[0], len);
+		wstring.resize(len - 1);
+		return wstring;
+	}
+
+	WCharString CharToWide(UINT codepage, const std::string &string)
+	{
+		return CharToWide(codepage, string.c_str());
+	}
+
+	std::string WideToChar(UINT codepage, const WCharString &wstring)
+	{
+		return WideToChar(codepage, wstring.c_str());
+	}
+
+	#ifdef WNDLIB_UNICODE
+
+		std::string ToUTF8(LPCTSTR string)
+		{
+			return WideToChar(CP_UTF8, string);
+		}
+
+		std::string ToUTF8(const TCharString &string)
+		{
+			return WideToChar(CP_UTF8, string.c_str());
+		}
+
+		TCharString FromUTF8(const char *string)
+		{
+			return CharToWide(CP_UTF8, string);
+		}
+
+		TCharString FromUTF8(const std::string string)
+		{
+			return CharToWide(CP_UTF8, string.c_str());
+		}
+
+	#else
+
+		std::string ToUTF8(LPCTSTR string)
+		{
+			return WideToChar(CP_UTF8, CharToWide(CP_ACP, string));
+		}
+
+		std::string ToUTF8(const TCharString &string)
+		{
+			return WideToChar(CP_UTF8, CharToWide(CP_ACP, string.c_str()));
+		}
+
+		TCharString FromUTF8(const char *string)
+		{
+			return WideToChar(CP_ACP, CharToWide(CP_UTF8, string));
+		}
+
+		TCharString FromUTF8(const std::string string)
+		{
+			return WideToChar(CP_ACP, CharToWide(CP_UTF8, string.c_str()));
+		}
+
+	#endif
+
+	//
 	// Instance handle
 	//
 
@@ -216,73 +422,6 @@ namespace WndLib
 		}
 	}
 
-	TCHAR *TNewString(LPCTSTR str)
-	{
-		size_t count = lstrlen(str) + 1;
-
-		TCHAR *buffer = new TCHAR[count];
-		if (! buffer)
-			return 0;
-
-		memcpy(buffer, str, count * sizeof(TCHAR));
-		return buffer;
-	}
-
-	void Tvsnprintf(TCHAR *buffer, size_t bufferSize, const TCHAR *fmt, va_list argptr)
-	{
-		buffer[0] = 0;
-		#ifdef _MSC_VER
-		#pragma warning(disable:4996)
-		#endif
-		#ifdef WNDLIB_UNICODE
-			_vsnwprintf(buffer, bufferSize, fmt, argptr);
-		#else
-			_vsnprintf(buffer, bufferSize, fmt, argptr);
-		#endif
-		#ifdef _MSC_VER
-		#pragma warning(default:4996)
-		#endif
-		buffer[bufferSize - 1] = 0;
-	}
-
-	void Tsnprintf(TCHAR *buffer, size_t bufferSize, const TCHAR *fmt, ...)
-	{
-		va_list argptr;
-		va_start(argptr, fmt);
-		Tvsnprintf(buffer, bufferSize, fmt, argptr);
-		va_end(argptr);
-	}
-
-	bool Tstrcpy(TCHAR *buffer, size_t bufferSize, const TCHAR *src)
-	{
-		if (! bufferSize)
-			return false;
-
-		TCHAR *terminator = buffer + bufferSize - 1;
-
-		while (*src) {
-			if (buffer == terminator) {
-				*buffer = 0;
-				return false;
-			}
-
-			*buffer++ = *src++;
-		}
-
-		*buffer = 0;
-		return true;
-	}
-
-	bool Tstrcat(TCHAR *buffer, size_t bufferSize, const TCHAR *src)
-	{
-		size_t length = lstrlen(buffer);
-
-		if (length >= bufferSize)
-			return false;
-
-		return Tstrcpy(buffer + length, bufferSize - length, src);
-	}
-
 	double GetDPIScale(HDC hdc)
 	{
 		BOOL releaseDC = FALSE;
@@ -377,11 +516,103 @@ namespace WndLib
 		return CreateFontFromNonClientMetrics(&NONCLIENTMETRICS::lfStatusFont);
 	}
 
+	void InitAllCommonControls()
+	{
+		INITCOMMONCONTROLSEX controls;
+		memset(&controls, 0, sizeof(controls));
+		controls.dwSize = sizeof(controls);
+		controls.dwICC = 0xffff;
+		InitCommonControlsEx(&controls);
+	}
+
+	//
+	// Common dialogs
+	//
+
+	TCharString BrowseForFolder(HWND parent, LPCTSTR prompt)
+	{
+		for (;;)
+		{
+			BROWSEINFO browseInfo;
+			ZeroMemory(&browseInfo, sizeof (BROWSEINFO));
+
+			browseInfo.hwndOwner = parent;
+			browseInfo.pidlRoot = NULL;
+			browseInfo.pszDisplayName = NULL;
+			browseInfo.lpszTitle = prompt;
+			browseInfo.ulFlags = BIF_RETURNONLYFSDIRS;
+			browseInfo.lpfn = NULL;
+			browseInfo.lParam = NULL;
+
+			LPITEMIDLIST idList = SHBrowseForFolder (&browseInfo);
+			if (! idList) {
+				return TCharString();
+			}
+
+			TCHAR path[MAX_PATH];
+			if (! SHGetPathFromIDList(idList, path)) {
+				::MessageBox(parent, TEXT("Please select a filesystem folder."), NULL, MB_OK | MB_ICONSTOP);
+				continue;
+			}
+
+			return path;
+		}
+	}
+
+	TCharString BrowseForExistingFile(HWND parent, LPCTSTR title, LPCTSTR initialPath, LPCTSTR filters, int initialFilter, LPCTSTR initialDir)
+	{
+		OPENFILENAME ofn;
+		memset(&ofn, 0, sizeof(ofn));
+		ofn.lStructSize = sizeof(ofn);
+		ofn.hwndOwner = parent;
+		TCHAR szFile[260];
+		TCharStringCopy(szFile, WNDLIB_COUNTOF(szFile), initialPath ? initialPath : TEXT(""));
+		ofn.lpstrFile = szFile;
+		ofn.nMaxFile = sizeof(szFile);
+		ofn.lpstrFilter = filters;
+		ofn.nFilterIndex = initialFilter;
+		ofn.lpstrFileTitle = NULL;
+		ofn.nMaxFileTitle = 0;
+		ofn.lpstrInitialDir = initialDir;
+		ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
+		ofn.lpstrTitle = title;
+
+		if (! GetOpenFileName(&ofn)) 
+			return TCharString();
+
+		return ofn.lpstrFile;
+	}
+
+	TCharString BrowseForNewFile(HWND parent, LPCTSTR title, LPCTSTR initialPath, LPCTSTR filters, int initialFilter, LPCTSTR initialDir)
+	{
+		OPENFILENAME ofn;
+		memset(&ofn, 0, sizeof(ofn));
+		ofn.lStructSize = sizeof(ofn);
+		ofn.hwndOwner = parent;
+		TCHAR szFile[260];
+		TCharStringCopy(szFile, WNDLIB_COUNTOF(szFile), initialPath);
+		ofn.lpstrFile = szFile;
+		ofn.nMaxFile = WNDLIB_COUNTOF(szFile);
+		ofn.lpstrFilter = filters;
+		ofn.nFilterIndex = initialFilter;
+		ofn.lpstrFileTitle = NULL;
+		ofn.nMaxFileTitle = 0;
+		ofn.lpstrInitialDir = initialDir;
+		ofn.Flags = OFN_SHOWHELP | OFN_OVERWRITEPROMPT;
+		ofn.lpstrTitle = title;
+
+		if (! GetSaveFileName(&ofn)) 
+			return TCharString();
+
+		return ofn.lpstrFile;
+		
+	}
+
 	//
 	// Wnd
 	//
 
-	Wnd::WndMapping *Wnd::mapStart;
+	Wnd::WndMap Wnd::wndMap;
 	CriticalSection Wnd::mapLock;
 
 	static Wnd *creatingWnd = 0;
@@ -415,16 +646,15 @@ namespace WndLib
 		delete this;
 	}
 
-	bool Wnd::Attach(HWND hwnd, bool subclass)
+	void Wnd::Attach(HWND hwnd, bool subclass)
 	{
-		if (! hwnd)
-			return false;
+		WNDLIB_ASSERT(hwnd != NULL);
 
 		Detach();
 
 		bool alreadyAttached = FindWnd(hwnd) != NULL;
-		if (! alreadyAttached && ! Map(hwnd, this))
-			return false;
+		if (! alreadyAttached)
+			Map(hwnd, this);
 
 		_hwnd = hwnd;
 
@@ -433,8 +663,6 @@ namespace WndLib
 			_prevproc = HelpGetWndProc(_hwnd);
 			HelpSetWndProc(_hwnd, &SubclassWndProc);
 		}
-
-		return true;
 	}
 
 	void Wnd::SetHWnd(HWND hwnd)
@@ -588,7 +816,8 @@ namespace WndLib
 				return false;
 			}
 
-			return Attach(hwnd, subclass);
+			Attach(hwnd, subclass);
+			return true;
 		}
 		else
 		{
@@ -697,62 +926,25 @@ namespace WndLib
 		return false;
 	}
 
-	bool Wnd::Map(HWND hwnd, Wnd *wnd)
+	void Wnd::Map(HWND hwnd, Wnd *wnd)
 	{
 		CriticalSection::ScopedLock lock(mapLock);
-
-		for (WndMapping *m = mapStart; m; m = m->next)
-		{
-			if (m->hwnd == hwnd)
-			{
-				m->wnd = wnd;
-				return true;
-			}
-		}
-
-		WndMapping *newMapping = new(std::nothrow) WndMapping;
-		if (! newMapping)
-			return false;
-
-		newMapping->next = mapStart;
-		mapStart = newMapping;
-		newMapping->hwnd = hwnd;
-		newMapping->wnd = wnd;
-
-		return true;
+		wndMap[hwnd] = wnd;
 	}
 
-	bool Wnd::Unmap(Wnd *wnd)
+	void Wnd::Unmap(Wnd *wnd)
 	{
 		CriticalSection::ScopedLock lock(mapLock);
 
-		wnd->_hwnd = NULL;
-
-		WndMapping **prev = &mapStart;
-		for (WndMapping *m = mapStart; m; prev = &m->next, m = m->next)
-		{
-			if (m->wnd == wnd)
-			{
-				*prev = m->next;
-				delete m;
-				return true;
-			}
-		}
-
-		return false;
+		WndMap::iterator i = wndMap.find(wnd->GetHWnd());
+		if (i != wndMap.end())
+			wndMap.erase(i);
 	}
 
 	Wnd *Wnd::FindWnd(HWND hwnd)
 	{
 		CriticalSection::ScopedLock lock(mapLock);
-
-		for (WndMapping *m = mapStart; m; m = m->next)
-		{
-			if (m->hwnd == hwnd)
-				return m->wnd;
-		}
-
-		return NULL;
+		return wndMap[hwnd];
 	}
 
 	LRESULT WINAPI Wnd::SubclassWndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
@@ -841,10 +1033,7 @@ namespace WndLib
 		BOOL translated;
 		*out = (INT)::GetDlgItemInt(GetHWnd(), id, &translated, TRUE);
 
-		if (! translated)
-			return FALSE;
-		else
-			return TRUE;
+		return translated != FALSE;
 	}
 
 	bool Wnd::GetDlgItemInt(int id, unsigned *out)
@@ -854,10 +1043,7 @@ namespace WndLib
 		BOOL translated;
 		*out = (UINT)::GetDlgItemInt(GetHWnd(), id, &translated, FALSE);
 
-		if (! translated)
-			return FALSE;
-		else
-			return TRUE;
+		return translated != FALSE;
 	}
 
 	void Wnd::SendMessageToDescendants(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam, bool deep)
@@ -871,9 +1057,9 @@ namespace WndLib
 		}
 	}
 
-	WinString Wnd::GetWindowText()
+	TCharString Wnd::GetWindowText()
 	{
-		WinString string;
+		TCharString string;
 		string.resize(GetTextLength());
 		if (! string.empty())
 			GetWindowText(&string[0], string.size());
@@ -904,9 +1090,9 @@ namespace WndLib
 		return tm.tmAveCharWidth;
 	}
 
-	WinString Wnd::GetDlgItemText(int id)
+	TCharString Wnd::GetDlgItemText(int id)
 	{
-		WinString string;
+		TCharString string;
 		string.resize(128);
 		for (;;) {
 			UINT uGot = GetDlgItemText(id, (TCHAR *) &string[0], string.size());
@@ -1522,9 +1708,9 @@ namespace WndLib
 		return (INT)startpos - LineIndex(line);
 	}
 
-	WinString EditWnd::GetLine(UINT line)
+	TCharString EditWnd::GetLine(UINT line)
 	{
-		WinString string;
+		TCharString string;
 		string.resize(256);
 		for (;;)
 		{
@@ -1556,9 +1742,9 @@ namespace WndLib
 		return TEXT("LISTBOX");
 	}
 
-	WinString ListBoxWnd::GetText(INT item)
+	TCharString ListBoxWnd::GetText(INT item)
 	{
-		WinString string;
+		TCharString string;
 		string.resize(GetTextLen(item));
 		if (! string.empty())
 			GetText(item, &string[0]);
@@ -1582,9 +1768,9 @@ namespace WndLib
 		return TEXT("COMBOBOX");
 	}
 
-	WinString ComboBoxWnd::GetLBText(INT index)
+	TCharString ComboBoxWnd::GetLBText(INT index)
 	{
-		WinString string;
+		TCharString string;
 		string.resize(GetLBTextLen(index));
 		if (! string.empty())
 			GetLBText(index, &string[0]);
@@ -1646,12 +1832,17 @@ namespace WndLib
 	// RichEditWnd
 	//
 
-	LONG RichEditWnd::staticLoadLib = 0;
+	CriticalSection richeditLoadLibLock;
 
 	RichEditWnd::RichEditWnd()
 	{
-		if (InterlockedIncrement(&staticLoadLib) == 1)
+		CriticalSection::ScopedLock lock(richeditLoadLibLock);
+		static bool loaded = false;
+		if (! loaded)
+		{
+			loaded = true;
 			LoadLibrary(TEXT("riched32.dll"));
+		}
 	}
 
 	RichEditWnd::~RichEditWnd()
@@ -1667,12 +1858,60 @@ namespace WndLib
 	// RichEdit2Wnd
 	//
 
-	LONG RichEdit2Wnd::staticLoadLib = 0;
+	static CriticalSection richedit2LoadLibLock;
+	static LPCTSTR richedit2ClassName = NULL;
+
+	LPCTSTR RichEdit2Wnd::LoadLibrary()
+	{
+		CriticalSection::ScopedLock lock(richedit2LoadLibLock);
+		if (! richedit2ClassName)
+		{
+			if (! ::LoadLibrary(TEXT("msftedit.dll")))
+				::LoadLibrary(TEXT("riched20.dll"));
+
+			#ifdef WNDLIB_UNICODE
+				#define RICHCLASSSUFFIX "W"
+			#else
+				#define RICHCLASSSUFFIX "W"
+			#endif
+
+			// The UNICODE controls work correctly as long as they're
+			// sent ANSI messages.
+			static LPCTSTR classNames[] = 
+			{
+				//TEXT("RICHEDIT60W"), // Flickering issues
+				TEXT("RICHEDIT50W"),
+				TEXT("RICHEDIT41W"),
+				TEXT("RICHEDIT40W"),
+				TEXT("RichEdit20W"),
+
+				//TEXT("RICHEDIT60A"),
+				TEXT("RICHEDIT50A"),
+				TEXT("RICHEDIT41A"),
+				TEXT("RICHEDIT40A"),
+				TEXT("RichEdit20A"),
+			};
+
+			for (size_t i = 0; i != WNDLIB_COUNTOF(classNames); ++i)
+			{
+				WNDCLASSEX wc;
+				memset(&wc, 0, sizeof(wc));
+				wc.cbSize = sizeof(wc);
+
+				if (GetClassInfoEx(NULL, classNames[i], &wc) != 0)
+				{
+					richedit2ClassName = classNames[i];
+					break;
+				}
+			}
+		}
+
+		return richedit2ClassName;
+	}
 
 	RichEdit2Wnd::RichEdit2Wnd()
 	{
-		if (InterlockedIncrement(&staticLoadLib) == 1)
-			LoadLibrary(TEXT("riched20.dll"));
+		LoadLibrary();
 	}
 
 	RichEdit2Wnd::~RichEdit2Wnd()
@@ -1681,7 +1920,7 @@ namespace WndLib
 
 	LPCTSTR RichEdit2Wnd::GetClassName()
 	{
-		return RICHEDIT_CLASS;
+		return richedit2ClassName;
 	}
 
 	//
@@ -2067,13 +2306,10 @@ namespace WndLib
 	StatusBarWnd::StatusBarWnd()
 	{
 		_menuSelecting = false;
-		_prevText = 0;
 	}
 
 	StatusBarWnd::~StatusBarWnd()
 	{
-		if (_prevText)
-			delete[] _prevText;
 	}
 
 	LPCTSTR StatusBarWnd::GetClassName()
@@ -2094,18 +2330,15 @@ namespace WndLib
 			_menuSelecting = true;
 			GetText(0, buffer);
 
-			if (_prevText)
-				delete[] _prevText;
-
-			_prevText = TNewString(buffer);
+			_prevText = buffer;
 		}
 
 		if (flags == 0xffff && ! menu)
 		{
 			_menuSelecting = false;
 
-			if (_prevText)
-				SetText(0, SBT_NOBORDERS, _prevText);
+			if (! _prevText.empty())
+				SetText(0, SBT_NOBORDERS, _prevText.c_str());
 		}
 		else
 		{
@@ -2130,9 +2363,9 @@ namespace WndLib
 		}
 	}
 
-	WinString StatusBarWnd::GetText(int part)
+	TCharString StatusBarWnd::GetText(int part)
 	{
-		WinString string;
+		TCharString string;
 		string.resize(GetTextLength(part));
 		if (! string.empty()) 
 			GetText(part, &string[0]);
@@ -2229,9 +2462,9 @@ namespace WndLib
 		return AddButtons(1, &button);
 	}
 
-	WinString ToolbarWnd::GetButtonText(int commandid)
+	TCharString ToolbarWnd::GetButtonText(int commandid)
 	{
-		WinString string;
+		TCharString string;
 		string.resize(GetButtonText(commandid, NULL));
 		if (! string.empty())
 			GetButtonText(commandid, &string[0]);
@@ -2373,7 +2606,7 @@ namespace WndLib
 		Unload();
 	}
 
-	bool ModuleIcons::LoadExeIcons()
+	bool ModuleIcons::LoadModuleIcons()
 	{
 		TCHAR buffer[2048];
 

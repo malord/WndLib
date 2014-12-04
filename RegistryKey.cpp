@@ -98,7 +98,7 @@ namespace WndLib
 		return true;
 	}
 
-	void *RegistryKey::QueryValue(LPCTSTR subkey, LPCTSTR value, DWORD *typeout, WinString *buffer) const
+	void *RegistryKey::QueryValue(LPCTSTR subkey, LPCTSTR value, DWORD *typeout, TCharString *buffer) const
 	{
 		RegistryKey sub = Open(subkey);
 		if (! sub)
@@ -107,7 +107,7 @@ namespace WndLib
 		return sub.QueryValue(value, typeout, buffer);
 	}
 
-	void *RegistryKey::QueryValue(LPCTSTR value, DWORD *typeout, WinString *buffer) const
+	void *RegistryKey::QueryValue(LPCTSTR value, DWORD *typeout, TCharString *buffer) const
 	{
 		DWORD size;
 		if (! QueryValue(value, typeout, NULL, 0, &size))
@@ -125,7 +125,6 @@ namespace WndLib
 		switch (*typeout) 
 		{
 			case REG_SZ:
-			case REG_MULTI_SZ:
 			case REG_EXPAND_SZ:
 				// RegQueryValueEx may or may not return a null terminated 
 				// string depending on whether RegSetValue was called
@@ -152,7 +151,7 @@ namespace WndLib
 
 	DWORD RegistryKey::GetDWORD(LPCTSTR value, DWORD errorValue) const
 	{
-		WinString buffer;
+		TCharString buffer;
 		DWORD type;
 		void *got = QueryValue(value, &type, &buffer);
 
@@ -179,7 +178,7 @@ namespace WndLib
 		return SetValue(value, REG_DWORD, (const BYTE *) &number, sizeof(DWORD));
 	}
 
-	LPCTSTR RegistryKey::GetString(LPCTSTR subkey, LPCTSTR value, WinString *buffer) const
+	LPCTSTR RegistryKey::GetString(LPCTSTR subkey, LPCTSTR value, TCharString *buffer) const
 	{
 		RegistryKey sub = Open(subkey);
 		if (! sub)
@@ -188,7 +187,7 @@ namespace WndLib
 		return sub.GetString(value, buffer);
 	}
 
-	LPCTSTR RegistryKey::GetString(LPCTSTR value, WinString *buffer) const
+	LPCTSTR RegistryKey::GetString(LPCTSTR value, TCharString *buffer) const
 	{
 		DWORD type;
 		void *got = QueryValue(value, &type, buffer);
@@ -196,23 +195,25 @@ namespace WndLib
 		if (! got)
 			return NULL;
 
+		// TODO: expand REG_EXPAND_SZ?
+
 		if (type != REG_SZ && type != REG_EXPAND_SZ)
 			return NULL;
 
 		return (LPCTSTR) got;
 	}
 
-	WinString RegistryKey::GetString(LPCTSTR subkey, LPCTSTR value) const
+	TCharString RegistryKey::GetString(LPCTSTR subkey, LPCTSTR value) const
 	{
-		WinString string;
+		TCharString string;
 		if (! GetString(subkey, value, &string))
 			string.resize(0);
 		return string;
 	}
 
-	WinString RegistryKey::GetString(LPCTSTR value) const
+	TCharString RegistryKey::GetString(LPCTSTR value) const
 	{
-		WinString string;
+		TCharString string;
 		if (! GetString(value, &string))
 			string.resize(0);
 		return string;
@@ -277,7 +278,7 @@ namespace WndLib
 		return RegistryKey(result, NULL);
 	}
 
-	bool RegistryKey::EnumKey(LPCTSTR subkey, DWORD index, WinString *nameout, WinString *classout)
+	bool RegistryKey::EnumKey(LPCTSTR subkey, DWORD index, TCharString *nameout, TCharString *classout)
 	{
 		RegistryKey sub = Open(subkey);
 		if (! sub)
@@ -286,12 +287,12 @@ namespace WndLib
 		return sub.EnumKey(index, nameout, classout);
 	}
 
-	bool RegistryKey::EnumKey(DWORD index, WinString *nameout, WinString *classout)
+	bool RegistryKey::EnumKey(DWORD index, TCharString *nameout, TCharString *classout)
 	{
 		TCHAR namebuf[256];
-		TCHAR classbuf[64];
-
 		DWORD nameSize = (DWORD) WNDLIB_COUNTOF(namebuf);
+
+		TCHAR classbuf[64];
 		DWORD classSize = (DWORD) WNDLIB_COUNTOF(classbuf);
 
 		LONG result = RegEnumKeyEx(_key, index, namebuf, &nameSize, NULL, classbuf, &classSize, NULL);
@@ -333,7 +334,7 @@ namespace WndLib
 		return false;
 	}
 
-	bool RegistryKey::EnumValue(LPCTSTR subkey, DWORD index, WinString *nameout, DWORD *typeout)
+	bool RegistryKey::EnumValue(LPCTSTR subkey, DWORD index, TCharString *nameout, DWORD *typeout)
 	{
 		RegistryKey sub = Open(subkey);
 		if (! sub)
@@ -342,13 +343,12 @@ namespace WndLib
 		return sub.EnumValue(index, nameout, typeout);
 	}
 
-	bool RegistryKey::EnumValue(DWORD index, WinString *nameout, DWORD *typeout)
+	bool RegistryKey::EnumValue(DWORD index, TCharString *nameout, DWORD *typeout)
 	{
 		TCHAR namebuf[256];
-		DWORD type;
-
 		DWORD nameSize = (DWORD) WNDLIB_COUNTOF(namebuf);
 
+		DWORD type;
 		LONG result = RegEnumValue(_key, index, namebuf, &nameSize, NULL, &type, NULL, NULL);
 
 		if (result == ERROR_SUCCESS)

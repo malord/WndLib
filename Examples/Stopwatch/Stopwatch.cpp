@@ -10,9 +10,6 @@
 
 #ifdef _MSC_VER
 	#pragma comment(lib, "winmm.lib")
-	#pragma comment(lib, "comctl32.lib")
-	// Windows XP visual styles manifest
-	#pragma comment(linker,"\"/manifestdependency:type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
 #endif
 
 using namespace WndLib;
@@ -333,9 +330,9 @@ void StopwatchWnd::FormatTime(DWORD elapsedSeconds, TCHAR *buf, size_t bufSize)
 	int hh = (int) elapsedSeconds;
 	
 	if (! hh)
-		Tsnprintf(buf, bufSize, TEXT("%02d:%02d.%02d"), mm, ss, hs);
+		TCharStringFormat(buf, bufSize, TEXT("%02d:%02d.%02d"), mm, ss, hs);
 	else
-		Tsnprintf(buf, bufSize, TEXT("%02d:%02d:%02d.%02d"), hh, mm, ss, hs);
+		TCharStringFormat(buf, bufSize, TEXT("%02d:%02d:%02d.%02d"), hh, mm, ss, hs);
 }
 
 DWORD StopwatchWnd::GetElapsedSeconds() const
@@ -360,7 +357,7 @@ void StopwatchWnd::Draw(HDC hdc)
 	FormatTime(GetElapsedSeconds(), time, WNDLIB_COUNTOF(time));
 	
 	TCHAR buf[128];
-	Tsnprintf(buf, WNDLIB_COUNTOF(buf), TEXT("     %s     "), time); 
+	TCharStringFormat(buf, WNDLIB_COUNTOF(buf), TEXT("     %s     "), time); 
 		
 	SetTextColor(hdc, RGB(100, 255, 0));
 	SetBkColor(hdc, RGB(0, 0, 0));
@@ -396,11 +393,7 @@ void StopwatchWnd::Log(const TCHAR *event)
 
 int WINAPI WinMain(HINSTANCE hinstance, HINSTANCE, LPSTR, int showCommand)
 {
-	INITCOMMONCONTROLSEX controls;
-	memset(&controls, 0, sizeof(controls));
-	controls.dwSize = sizeof(controls);
-	controls.dwICC = ICC_WIN95_CLASSES;
-	InitCommonControlsEx(&controls);
+	InitAllCommonControls();
 	
 	timeBeginPeriod(1);
 	
@@ -416,11 +409,11 @@ int WINAPI WinMain(HINSTANCE hinstance, HINSTANCE, LPSTR, int showCommand)
 	MSG msg;
 	while (GetMessage(&msg, NULL, 0, 0))
 	{
-		if (FilterMessage(&msg))
-			continue;
-			
-		TranslateMessage(&msg);
-		DispatchMessage(&msg);
+		if (! FilterMessage(&msg))
+		{
+			TranslateMessage(&msg);
+			DispatchMessage(&msg);
+		}
 	}
 	
 	timeEndPeriod(1);

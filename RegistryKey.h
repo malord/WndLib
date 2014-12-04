@@ -60,22 +60,22 @@ namespace WndLib
 		bool QueryValue(LPCTSTR value, DWORD *typeout, void *buffer, DWORD buffersize, DWORD *sizeout) const;
 
 		// Read the value of a key. Deals with the null termination issue.
-		void *QueryValue(LPCTSTR subkey, LPCTSTR value, DWORD *typeout, WinString *buffer) const;
+		void *QueryValue(LPCTSTR subkey, LPCTSTR value, DWORD *typeout, TCharString *buffer) const;
 
 		// Read the value of this key. Deals with the null termination issue.
-		void *QueryValue(LPCTSTR value, DWORD *typeout, WinString *buffer) const;
+		void *QueryValue(LPCTSTR value, DWORD *typeout, TCharString *buffer) const;
 
 		// Read a REG_SZ or REG_EXPAND_SZ from the key.
-		LPCTSTR GetString(LPCTSTR subkey, LPCTSTR value, WinString *buffer) const;
+		LPCTSTR GetString(LPCTSTR subkey, LPCTSTR value, TCharString *buffer) const;
 
 		// Read a REG_SZ or REG_EXPAND_SZ from the key.
-		LPCTSTR GetString(LPCTSTR value, WinString *buffer) const;
+		LPCTSTR GetString(LPCTSTR value, TCharString *buffer) const;
 
 		// Read a REG_SZ or REG_EXPAND_SZ from the key.
-		WinString GetString(LPCTSTR subkey, LPCTSTR value) const;
+		TCharString GetString(LPCTSTR subkey, LPCTSTR value) const;
 
 		// Read a REG_SZ or REG_EXPAND_SZ from the key.
-		WinString GetString(LPCTSTR value) const;
+		TCharString GetString(LPCTSTR value) const;
 
 		// Set the value of a key. See RegSetValueEx.
 		bool SetValue(LPCTSTR subkey, LPCTSTR value, DWORD type, const BYTE *data, DWORD datasize);
@@ -111,16 +111,16 @@ namespace WndLib
 		RegistryKey CreateKey(LPCTSTR subkey);
 
 		// Enumerate the contents of a key.
-		bool EnumKey(LPCTSTR subkey, DWORD index, WinString *nameout, WinString *classout = NULL);
+		bool EnumKey(LPCTSTR subkey, DWORD index, TCharString *nameout, TCharString *classout = NULL);
 
 		// Enumerate the contents of this key.
-		bool EnumKey(DWORD index, WinString *nameout, WinString *classout = NULL);
+		bool EnumKey(DWORD index, TCharString *nameout, TCharString *classout = NULL);
 
 		// Enumerate the values of a key.
-		bool EnumValue(LPCTSTR subkey, DWORD index, WinString *nameout, DWORD *typeout = NULL);
+		bool EnumValue(LPCTSTR subkey, DWORD index, TCharString *nameout, DWORD *typeout = NULL);
 
 		// Enumerate the values of this key.
-		bool EnumValue(DWORD index, WinString *nameout, DWORD *typeout = NULL);
+		bool EnumValue(DWORD index, TCharString *nameout, DWORD *typeout = NULL);
 
 	private:
 

@@ -21,7 +21,6 @@ namespace WndLib
 	{
 		WND_WM_DECLARE(LogWnd, Wnd)
 		WND_WM_FUNC(OnClose)
-		WND_WM_FUNC(OnDestroy)
 		WND_WM_FUNC(OnCreate)
 		WND_WM_FUNC(OnSize)
 		WND_WM_FUNC(OnUser)
@@ -34,6 +33,15 @@ namespace WndLib
 		~LogWnd();
 
 		bool Create(LPCTSTR title, HWND parent = NULL);
+		
+		enum
+		{
+			FLAG_CLIENT_EDGE = 1u,
+			FLAG_CHILD = 2u,
+			FLAG_NO_PADDING = 4u,
+		};
+
+		bool Create(LPCTSTR title, DWORD flags, HWND parent = NULL);
 
 		enum ShowCommand
 		{
@@ -77,6 +85,10 @@ namespace WndLib
 
 		// Wnd overrides
 		virtual LPCTSTR GetClassName();
+		virtual void GetWndClass(WNDCLASSEX *wc);
+
+		// Call ShowWindow(command) on the top-level window we're in.
+		void ShowFrame(int command);
 
 	private:
 
@@ -90,7 +102,7 @@ namespace WndLib
 
 		struct LogEntry
 		{
-			WinString text;
+			TCharString text;
 			COLORREF colour;
 			ShowCommand showCommand;
 			LogEntry *next;
@@ -99,6 +111,7 @@ namespace WndLib
 		RichEdit2Wnd _edit;
 		Font _font;
 		CHARFORMAT _charFormat;
+		DWORD _flags;
 
 		CriticalSection _cs;
 		LogEntry *_logEntry;
