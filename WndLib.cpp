@@ -1062,7 +1062,7 @@ namespace WndLib
 		TCharString string;
 		string.resize(GetTextLength());
 		if (! string.empty())
-			GetWindowText(&string[0], string.size());
+			GetWindowText(&string[0], string.size() + 1);
 		return string;
 	}
 
@@ -1095,7 +1095,7 @@ namespace WndLib
 		TCharString string;
 		string.resize(128);
 		for (;;) {
-			UINT uGot = GetDlgItemText(id, (TCHAR *) &string[0], string.size());
+			UINT uGot = GetDlgItemText(id, (TCHAR *) &string[0], string.size() + 1);
 
 			if (uGot < string.size()) // Intentional off by one to account for \0
 				return string;
